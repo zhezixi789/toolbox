@@ -342,7 +342,7 @@ body{
   <div class="sidebar" id="sidebar">
     <div class="side-brand">🧰 万能办公</div>
     <div class="side-group">
-      <button class="side-group-title open" data-group="pdf"><span>📄 PDF 工具</span><span class="sg-arrow">▶</span></button>
+      <button class="side-group-title open" data-group="pdf" onclick="var i=document.getElementById('group-pdf');if(i.style.display=='none'){i.style.display='';this.classList.add('open')}else{i.style.display='none';this.classList.remove('open')}"><span>📄 PDF 工具</span><span class="sg-arrow">▶</span></button>
       <div class="side-group-items" id="group-pdf">
         <button class="side-tab active" data-tab="merge"><span class="tab-icon">📦</span>合并</button>
         <button class="side-tab" data-tab="split"><span class="tab-icon">✂️</span>拆分</button>
