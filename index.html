@@ -15,7 +15,6 @@
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js CDN failed')"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="console.warn('JSZip CDN failed')"></script>
-<script async src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js" onerror="console.warn('FFmpeg CDN failed')"></script>
 <style>
 :root {
   --primary: #6366F1;
@@ -342,14 +341,6 @@ body{
         <div class="side-coming">即将推出…</div>
       </div>
     </div>
-    <div class="side-group">
-      <button class="side-group-title" data-group="audio"><span>🎵 音频工具</span><span class="sg-arrow">▶</span></button>
-      <div class="side-group-items" id="group-audio" style="display:none">
-        <button class="side-tab" data-tab="audio-convert"><span class="tab-icon">🔄</span>格式转换</button>
-        <button class="side-tab" data-tab="audio-trim"><span class="tab-icon">✂️</span>音频裁剪</button>
-        <button class="side-tab" data-tab="audio-speed"><span class="tab-icon">⏩</span>音频倍速</button>
-      </div>
-    </div>
     <button class="side-gear-btn" id="gearBtn" title="编辑工具显示/隐藏">⚙️</button>
   </div>
 
@@ -523,7 +514,6 @@ body{
         <span id="compressQualityLabel" style="font-size:13px;font-weight:600;min-width:36px">60%</span>
       </div>
       <div id="compressInfo" style="font-size:12px;color:var(--text-muted)"></div>
-      <canvas id="compressPreview" width="200" height="280" style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;display:none;max-width:100%"></canvas>
     </div>
     <div class="actions" style="margin-top:8px">
       <button class="btn btn-primary" id="compressBtn" disabled>
@@ -586,10 +576,6 @@ body{
           <option value="cover">铺满页面</option>
         </select>
       </div>
-      <div class="page-grid-section" id="img2pdfGridSection" style="display:none">
-        <div class="page-grid-header"><span class="pg-label" id="img2pdfGridLabel">页面布局预览</span></div>
-        <div class="page-grid" id="img2pdfGrid"></div>
-      </div>
     </div>
     <div class="actions" style="margin-top:8px">
       <button class="btn btn-primary" id="img2pdfBtn" disabled>
@@ -629,101 +615,7 @@ body{
     </div>
   </div>
 
-  <!-- === TAB: AUDIO TRIM === -->
-  <div class="tool-panel" id="panel-audio-trim" style="display:none">
-    <div class="empty-state visible" id="audioTrimEmpty">拖入一个音频文件，裁剪片段</div>
-    <div class="audio-config" id="audioTrimConfig" style="display:none;flex-direction:column;gap:12px">
-      <div class="file-info-bar visible" style="margin:0">
-        <div style="font-size:22px;flex-shrink:0">🎵</div>
-        <div class="fi-details"><div class="fi-name" id="audioTrimName"></div><div class="fi-meta" id="audioTrimMeta"></div></div>
-        <button class="fi-remove" id="audioTrimRemove">✕</button>
-      </div>
-      <audio id="audioTrimPlayer" controls style="width:100%;border-radius:8px"></audio>
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:13px;color:var(--text-secondary)">开始：</span>
-          <input type="text" id="audioTrimStart" value="00:00" placeholder="mm:ss" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:monospace">
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:13px;color:var(--text-secondary)">结束：</span>
-          <input type="text" id="audioTrimEnd" value="00:30" placeholder="mm:ss" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:monospace">
-        </div>
-        <span style="font-size:11px;color:var(--text-muted)">格式 mm:ss（如 01:30 = 1分30秒）</span>
-      </div>
-    </div>
-    <div class="actions" style="margin-top:8px">
-      <button class="btn btn-primary" id="audioTrimBtn" disabled>
-        <span class="btn-label">裁剪并下载</span><span class="btn-spinner"></span>
-      </button>
-    </div>
-  </div>
-
-  <!-- === TAB: AUDIO SPEED === -->
-  <div class="tool-panel" id="panel-audio-speed" style="display:none">
-    <div class="empty-state visible" id="audioSpeedEmpty">拖入一个音频文件，调整播放速度</div>
-    <div class="audio-config" id="audioSpeedConfig" style="display:none;flex-direction:column;gap:12px">
-      <div class="file-info-bar visible" style="margin:0">
-        <div style="font-size:22px;flex-shrink:0">🎵</div>
-        <div class="fi-details"><div class="fi-name" id="audioSpeedName"></div><div class="fi-meta" id="audioSpeedMeta"></div></div>
-        <button class="fi-remove" id="audioSpeedRemove">✕</button>
-      </div>
-      <audio id="audioSpeedPlayer" controls style="width:100%;border-radius:8px"></audio>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:13px;color:var(--text-secondary)">倍速：</span>
-        <select id="audioSpeedRate" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
-          <option value="0.5">0.5x（慢放）</option>
-          <option value="0.75">0.75x（略慢）</option>
-          <option value="1.25">1.25x（略快）</option>
-          <option value="1.5" selected>1.5x（快放）</option>
-          <option value="2.0">2.0x（倍速）</option>
-        </select>
-        <span style="font-size:11px;color:var(--text-muted)">保持音调不变</span>
-      </div>
-    </div>
-    <div class="actions" style="margin-top:8px">
-      <button class="btn btn-primary" id="audioSpeedBtn" disabled>
-        <span class="btn-label">调整倍速并下载</span><span class="btn-spinner"></span>
-      </button>
-    </div>
-  </div>
-  <div class="tool-panel" id="panel-audio-convert" style="display:none">
-    <div class="empty-state visible" id="audioEmpty">拖入音频文件（MP3/WAV/FLAC/AAC/OGG/M4A），批量转换格式</div>
-    <div class="audio-config" id="audioConfig" style="display:none;flex-direction:column;gap:12px">
-      <div class="audio-file-list-section" id="audioListSection">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px">
-          <span style="font-size:13px;color:var(--text-secondary)" id="audioCount"></span>
-          <button class="ml-clear" id="audioClear">清空</button>
-        </div>
-        <div class="merge-list" id="audioList"></div>
-      </div>
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap">转为：</span>
-        <select id="audioFormat" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
-          <option value="mp3">MP3（通用、体积小）</option>
-          <option value="wav">WAV（无损、体积大）</option>
-          <option value="aac">AAC（苹果优化）</option>
-          <option value="flac">FLAC（无损压缩）</option>
-          <option value="ogg">OGG（开源格式）</option>
-          <option value="m4a">M4A（手机录音）</option>
-        </select>
-        <div style="display:flex;align-items:center;gap:4px">
-          <span style="font-size:12px;color:var(--text-muted)">码率：</span>
-          <select id="audioBitrate" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
-            <option value="128k">128kbps（标准）</option>
-            <option value="192k" selected>192kbps（高质量）</option>
-            <option value="256k">256kbps（极高）</option>
-            <option value="320k">320kbps（最佳）</option>
-          </select>
-        </div>
-      </div>
-      <div id="audioProgress" style="display:none;font-size:13px;color:var(--text-secondary);padding:8px 12px;background:#F8FAFC;border-radius:8px"></div>
-    </div>
-    <div class="actions" style="margin-top:8px">
-      <button class="btn btn-primary" id="audioConvertBtn" disabled>
-        <span class="btn-label">转换并下载</span><span class="btn-spinner"></span>
-      </button>
-    </div>
-  </div>
+  <!-- === TAB: PAGE NUMBERS === -->
   <div class="tool-panel" id="panel-pagenum" style="display:none">
     <div class="file-info-bar" id="pagenumFileBar">
       <div class="fi-icon"><svg width="32" height="32" viewBox="0 0 32 32"><rect x="4" y="2" width="24" height="28" rx="2.5" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.2"/><text x="16" y="21" text-anchor="middle" font-size="11" font-weight="700" fill="#DC2626">PDF</text></svg></div>
@@ -1003,8 +895,8 @@ function switchTab(tab){
   dzSub.textContent=s+(extra?' · '+extra:'');
 
   // Update file input accept/multiple
-  if(tab==='merge'||tab==='img2pdf'||tab==='audio-convert')fileInput.multiple=true;else fileInput.multiple=false;
-  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert'||tab==='audio-trim'||tab==='audio-speed')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
+  if(tab==='merge'||tab==='img2pdf')fileInput.multiple=true;else fileInput.multiple=false;
+  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else fileInput.accept='.pdf,application/pdf';
 
   // Refresh tab-specific UI
   if(tab==='merge')refreshMergeUI();
@@ -1017,9 +909,6 @@ function switchTab(tab){
   else if(tab==='img2pdf')refreshImg2pdfUI();
   else if(tab==='watermark')refreshWatermarkUI();
   else if(tab==='pagenum')refreshPagenumUI();
-  else if(tab==='audio-convert')refreshAudioUI();
-  else if(tab==='audio-trim')refreshAudioTrimUI();
-  else if(tab==='audio-speed')refreshAudioSpeedUI();
 
   // Drop zone has-file class
   updateDropZoneState();
@@ -1219,15 +1108,6 @@ function handleDrop(fileList){
   }else if(activeTab==='img2pdf'){
     status('路由到图转PDF');
     addImageFiles(pdfs);
-  }else if(activeTab==='audio-convert'){
-    status('路由到音频转换');
-    addAudioFiles(pdfs);
-  }else if(activeTab==='audio-trim'){
-    status('路由到音频裁剪');
-    handleAudioSingle(pdfs[0],'trim');
-  }else if(activeTab==='audio-speed'){
-    status('路由到音频倍速');
-    handleAudioSingle(pdfs[0],'speed');
   }else{
     status('路由到单文件处理: '+pdfs[0].name);
     handleSingleFile(pdfs[0]);
@@ -1966,34 +1846,11 @@ $('#compressQuality').addEventListener('input',function(){
   compressQuality=parseInt(this.value);
   $('#compressQualityLabel').textContent=compressQuality+'%';
   updateCompressInfo();
-  updateCompressPreview();
 });
 function updateCompressInfo(){
   if(!uploadedFile)return;
   const est=Math.max((uploadedFile.size*compressQuality/100*0.7)|0,uploadedFile.size*0.05);
-  $('#compressInfo').textContent=`原始大小：${formatSize(uploadedFile.size)} → 预计压缩后约 ${formatSize(est)}（质量 ${compressQuality}%）`;
-}
-function updateCompressPreview(){
-  const cvs=$('#compressPreview');if(!cvs||!uploadedFile||!thumbCache.length){cvs.style.display='none';return}
-  cvs.style.display='';
-  // Show first page with simulated quality via canvas scaling
-  const img=new Image();
-  img.onload=()=>{
-    const ctx=cvs.getContext('2d');
-    // Downscale then upscale to simulate quality loss
-    const scale=compressQuality/100;
-    const w=Math.round(img.width*scale*0.6);
-    const h=Math.round(img.height*scale*0.6);
-    const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
-    tmp.getContext('2d').drawImage(img,0,0,w,h);
-    cvs.width=200;cvs.height=Math.round(200/img.width*img.height);
-    ctx.drawImage(tmp,0,0,cvs.width,cvs.height);
-    // Label
-    ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,cvs.height-20,cvs.width,20);
-    ctx.fillStyle='#fff';ctx.font='11px sans-serif';ctx.textAlign='center';
-    ctx.fillText(`质量 ${compressQuality}% — 预览`,cvs.width/2,cvs.height-5);
-  };
-  img.src=thumbCache[0];
+  $('#compressInfo').textContent=`原始大小：${formatSize(uploadedFile.size)} → 预计压缩后约 ${formatSize(est)}`;
 }
 function refreshCompressUI(){
   const bar=$('#compressFileBar');const empty=$('#compressEmpty');const config=$('#compressConfig');const btn=$('#compressBtn');
@@ -2002,7 +1859,6 @@ function refreshCompressUI(){
   $('#compressFileName').textContent=uploadedFile.name;
   $('#compressFileMeta').textContent=`${uploadedFile.pageCount} 页 · ${formatSize(uploadedFile.size)}`;
   updateCompressInfo();btn.disabled=false;
-  setTimeout(updateCompressPreview,300);
 }
 $('#compressRemove').addEventListener('click',()=>{uploadedFile=null;refreshCompressUI();updateDropZoneState()});
 $('#compressBtn').addEventListener('click',()=>payThen(async()=>{
@@ -2118,53 +1974,14 @@ function refreshImg2pdfUI(){
     item.querySelector('.mi-remove').addEventListener('click',e=>{e.stopPropagation();imageFiles.splice(parseInt(e.currentTarget.dataset.idx),1);refreshImg2pdfUI()});
     list.appendChild(item);
   });
-  // Render page layout preview
-  updateImg2pdfPreview();
 }
-function updateImg2pdfPreview(){
+let imgDragIdx=null;
 function imgDragStart(e){imgDragIdx=parseInt(this.dataset.index);this.classList.add('dragging');e.dataTransfer.effectAllowed='move';const g=document.createElement('div');g.style.cssText='width:1px;height:1px;position:absolute;top:-9999px';document.body.appendChild(g);e.dataTransfer.setDragImage(g,0,0);setTimeout(()=>document.body.removeChild(g),0)}
 function imgDragOver(e){e.preventDefault();$$('.merge-item.drop-before,.merge-item.drop-after').forEach(el=>el.classList.remove('drop-before','drop-after'));const r=this.getBoundingClientRect();this.classList.add(e.clientY<(r.top+r.height/2)?'drop-before':'drop-after')}
 function imgDragLeave(e){if(!this.contains(e.relatedTarget))this.classList.remove('drop-before','drop-after')}
 function imgDrop(e){e.preventDefault();this.classList.remove('drop-before','drop-after');if(imgDragIdx===null)return;const ti=parseInt(this.dataset.index);const r=this.getBoundingClientRect();let ins=e.clientY<(r.top+r.height/2)?ti:ti+1;if(imgDragIdx<ins)ins--;if(imgDragIdx!==ins){const[item]=imageFiles.splice(imgDragIdx,1);imageFiles.splice(ins,0,item)}refreshImg2pdfUI()}
 function imgDragEnd(){imgDragIdx=null;$$('.merge-item.dragging,.merge-item.drop-before,.merge-item.drop-after').forEach(el=>el.classList.remove('dragging','drop-before','drop-after'))}
 $('#img2pdfClear').addEventListener('click',()=>{imageFiles=[];refreshImg2pdfUI()});
-$('#img2pdfPageSize').addEventListener('change',()=>updateImg2pdfPreview());
-$('#img2pdfFit').addEventListener('change',()=>updateImg2pdfPreview());
-
-function updateImg2pdfPreview(){
-  const grid=$('#img2pdfGrid');const section=$('#img2pdfGridSection');const label=$('#img2pdfGridLabel');
-  if(!imageFiles.length){section.style.display='none';return}
-  section.style.display='';label.textContent=`页面布局预览（${$('#img2pdfPageSize').selectedOptions[0].text} · ${$('#img2pdfFit').selectedOptions[0].text}）`;
-  grid.innerHTML='';
-  const sizeKey=$('#img2pdfPageSize').value;const fit=$('#img2pdfFit').value;
-  imageFiles.slice(0,20).forEach((f,i)=>{
-    let pw,ph;
-    if(sizeKey==='original'){pw=f.width;ph=f.height}
-    else{[pw,ph]=PAGE_SIZES[sizeKey]}
-    const card=document.createElement('div');
-    card.className='page-card';
-    // Draw a mini mockup on canvas
-    const cvs=document.createElement('canvas');cvs.width=120;cvs.height=160;
-    const ctx=cvs.getContext('2d');
-    // White page background
-    ctx.fillStyle='#fff';ctx.fillRect(0,0,120,160);ctx.strokeStyle='#E2E8F0';ctx.lineWidth=1;ctx.strokeRect(0,0,120,160);
-    // Calculate image placement
-    const scale=120/pw;let iw=f.width*scale,ih=f.height*scale*0.7; // Adjust for canvas ratio
-    const pageH=160;const actualScale=pageH/ph;
-    let x,y,w,h;
-    if(fit==='contain'){const s=Math.min(120/pw,pageH/ph);w=f.width*s;h=f.height*s;x=(120-w)/2;y=(pageH-h)/2}
-    else{w=120;h=pageH;x=0;y=0}
-    ctx.fillStyle='#E2E8F0';ctx.fillRect(x,y,w,h);
-    // Draw tiny image placeholder
-    const img=new Image();
-    img.onload=()=>{ctx.drawImage(img,x,y,w,h);};
-    img.src=f.dataUrl;
-    setTimeout(()=>{if(img.complete)ctx.drawImage(img,x,y,w,h)},200);
-    card.innerHTML=`<div class="pc-canvas-wrap">${cvs.outerHTML}</div><div class="pc-label">${escapeHtml(f.name.substring(0,12))}</div>`;
-    grid.appendChild(card);
-  });
-  if(imageFiles.length>20){grid.innerHTML+='<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:8px">… 还有 '+(imageFiles.length-20)+' 张</div>';}
-}
 const PAGE_SIZES={a4:[595.28,841.89],letter:[612,792]};
 $('#img2pdfBtn').addEventListener('click',()=>payThen(async()=>{
   if(!imageFiles.length)return;
@@ -2552,173 +2369,7 @@ $('#payCancelBtn').addEventListener('click',()=>{
   }
 });
 
-// ==================== AUDIO CONVERT TAB ====================
-let audioFiles=[];
-let ffmpeg=null;let ffmpegLoading=false;
-
-async function initFFmpeg(){
-  if(ffmpeg)return ffmpeg;
-  if(ffmpegLoading)return null;
-  ffmpegLoading=true;
-  status('正在加载音频引擎（首次约需 5 秒）…');
-  try{
-    const{FFmpeg}=FFmpegWASM;
-    ffmpeg=new FFmpeg();
-    await ffmpeg.load({classWorkerURL:'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js'});
-    status('音频引擎就绪 ✅');
-    return ffmpeg;
-  }catch(e){status('音频引擎加载失败: '+e.message,true);ffmpegLoading=false;return null}
-  finally{ffmpegLoading=false}
-}
-
-async function addAudioFiles(newFiles){
-  const audio=Array.from(newFiles).filter(f=>f.type.startsWith('audio/')||/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(f.name));
-  if(!audio.length){toast('未识别到音频文件',true);return}
-  audioFiles.push(...audio);
-  refreshAudioUI();
-}
-
-function getAudioFormat(name){
-  const ext=name.split('.').pop().toLowerCase();
-  return ext==='m4a'?'M4A':ext.toUpperCase();
-}
-
-function refreshAudioUI(){
-  const section=$('#audioListSection');const empty=$('#audioEmpty');const config=$('#audioConfig');
-  const list=$('#audioList');const btn=$('#audioConvertBtn');const count=$('#audioCount');
-  const hasFiles=audioFiles.length>0;
-  section.style.display=hasFiles?'flex':'none';empty.classList.toggle('visible',!hasFiles);config.style.display=hasFiles?'flex':'none';
-  count.innerHTML=hasFiles?`共 <strong>${audioFiles.length}</strong> 个音频文件`:'';btn.disabled=!hasFiles;
-  list.innerHTML='';
-  audioFiles.forEach((f,i)=>{
-    const item=document.createElement('div');item.className='merge-item';
-    item.innerHTML=`<div style="flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:22px">🎵</div><div class="mi-info"><span class="mi-name">${escapeHtml(f.name)}</span><div class="mi-meta"><span>${getAudioFormat(f.name)}</span><span>${formatSize(f.size)}</span></div></div><button class="mi-remove" data-idx="${i}">✕</button>`;
-    item.querySelector('.mi-remove').addEventListener('click',e=>{e.stopPropagation();audioFiles.splice(parseInt(e.currentTarget.dataset.idx),1);refreshAudioUI()});
-    list.appendChild(item);
-  });
-}
-
-$('#audioClear').addEventListener('click',()=>{audioFiles=[];refreshAudioUI()});
-$('#audioConvertBtn').addEventListener('click',()=>payThen(async()=>{
-  if(!audioFiles.length)return;
-  const btn=$('#audioConvertBtn');btn.classList.add('loading');btn.disabled=true;
-  const fmt=$('#audioFormat').value;const br=$('#audioBitrate').value;const progress=$('#audioProgress');
-  progress.style.display='';progress.textContent='正在初始化…';
-  try{
-    const f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return}
-    let results=[];
-    for(let i=0;i<audioFiles.length;i++){
-      const file=audioFiles[i];
-      progress.textContent=`转换中 ${i+1}/${audioFiles.length}：${file.name}`;
-      const inName='input_'+i+'.'+file.name.split('.').pop();
-      const outName='output_'+i+'.'+fmt;
-      await f.writeFile(inName,new Uint8Array(await file.arrayBuffer()));
-      const args=['-i',inName];
-      if(fmt==='mp3')args.push('-codec:a','libmp3lame','-b:a',br);
-      else if(fmt==='wav')args.push('-codec:a','pcm_s16le');
-      else if(fmt==='aac')args.push('-codec:a','aac','-b:a',br);
-      else if(fmt==='flac')args.push('-codec:a','flac');
-      else if(fmt==='ogg')args.push('-codec:a','libvorbis','-b:a',br);
-      else if(fmt==='m4a')args.push('-codec:a','aac','-b:a',br,'-movflags','+faststart');
-      args.push(outName);
-      await f.exec(args);
-      const outBytes=await f.readFile(outName);
-      results.push({name:file.name.replace(/\.[^.]+$/,'.'+fmt),bytes:outBytes});
-      await f.deleteFile(inName);await f.deleteFile(outName);
-    }
-    progress.textContent='转换完成 ✅';
-    if(results.length===1){
-      downloadBlob(new Blob([results[0].bytes],{type:'audio/'+fmt}),results[0].name);
-    }else{
-      const zip=new JSZip();
-      results.forEach(r=>zip.file(r.name,r.bytes));
-      const zipBlob=await zip.generateAsync({type:'blob'});
-      downloadBlob(zipBlob,`音频转换_${timestamp()}.zip`);
-    }
-    toast(`✅ 已转换 ${results.length} 个音频文件`);
-  }catch(err){console.error(err);status('转换失败: '+(err.message||err),true);toast('转换失败: '+(err.message||'未知错误'),true)}
-  finally{progress.style.display='none';btn.classList.remove('loading');btn.disabled=false;}
-}));
-
-// ==================== AUDIO TRIM & SPEED TABS ====================
-let audioTrimFile=null,audioSpeedFile=null;
-
-function parseTime(s){
-  const parts=s.split(':').map(Number);
-  if(parts.length===2)return parts[0]*60+(parts[1]||0);
-  return parts[0]||0;
-}
-function formatTime(sec){const m=Math.floor(sec/60),s=Math.floor(sec%60);return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`}
-
-async function handleAudioSingle(file,mode){
-  if(!file.type.startsWith('audio/')&&!/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(file.name)){toast('请上传音频文件',true);return}
-  const url=URL.createObjectURL(file);
-  if(mode==='trim'){
-    audioTrimFile={file,url};refreshAudioTrimUI();
-  }else{
-    audioSpeedFile={file,url};refreshAudioSpeedUI();
-  }
-}
-
-function refreshAudioTrimUI(){
-  const empty=$('#audioTrimEmpty');const config=$('#audioTrimConfig');const btn=$('#audioTrimBtn');
-  if(!audioTrimFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return}
-  empty.classList.remove('visible');config.style.display='flex';btn.disabled=false;
-  $('#audioTrimName').textContent=audioTrimFile.file.name;
-  $('#audioTrimMeta').textContent=`${getAudioFormat(audioTrimFile.file.name)} · ${formatSize(audioTrimFile.file.size)}`;
-  const player=$('#audioTrimPlayer');player.src=audioTrimFile.url;
-  player.onloadedmetadata=()=>{$('#audioTrimEnd').value=formatTime(player.duration)};
-}
-$('#audioTrimRemove').addEventListener('click',()=>{if(audioTrimFile)URL.revokeObjectURL(audioTrimFile.url);audioTrimFile=null;refreshAudioTrimUI()});
-$('#audioTrimBtn').addEventListener('click',()=>payThen(async()=>{
-  if(!audioTrimFile)return;
-  const btn=$('#audioTrimBtn');btn.classList.add('loading');btn.disabled=true;
-  try{
-    const f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return}
-    const start=parseTime($('#audioTrimStart').value);
-    const end=parseTime($('#audioTrimEnd').value);
-    if(end<=start){toast('结束时间必须大于开始时间',true);return}
-    const dur=end-start;
-    const ext=audioTrimFile.file.name.split('.').pop();
-    await f.writeFile('input.'+ext,new Uint8Array(await audioTrimFile.file.arrayBuffer()));
-    await f.exec(['-i','input.'+ext,'-ss',String(start),'-t',String(dur),'-c','copy','output.'+ext]);
-    const out=await f.readFile('output.'+ext);
-    const newName=audioTrimFile.file.name.replace(/\.([^.]+)$/,'_裁剪.$1');
-    downloadBlob(new Blob([out],{type:audioTrimFile.file.type||'audio/'+ext}),newName);
-    toast(`✅ 已裁剪 ${formatTime(start)} 至 ${formatTime(end)}`);
-  }catch(err){toast('裁剪失败: '+(err.message||'未知错误'),true)}
-  finally{btn.classList.remove('loading');btn.disabled=false;}
-}));
-
-function refreshAudioSpeedUI(){
-  const empty=$('#audioSpeedEmpty');const config=$('#audioSpeedConfig');const btn=$('#audioSpeedBtn');
-  if(!audioSpeedFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return}
-  empty.classList.remove('visible');config.style.display='flex';btn.disabled=false;
-  $('#audioSpeedName').textContent=audioSpeedFile.file.name;
-  $('#audioSpeedMeta').textContent=`${getAudioFormat(audioSpeedFile.file.name)} · ${formatSize(audioSpeedFile.file.size)}`;
-  $('#audioSpeedPlayer').src=audioSpeedFile.url;
-}
-$('#audioSpeedRemove').addEventListener('click',()=>{if(audioSpeedFile)URL.revokeObjectURL(audioSpeedFile.url);audioSpeedFile=null;refreshAudioSpeedUI()});
-$('#audioSpeedBtn').addEventListener('click',()=>payThen(async()=>{
-  if(!audioSpeedFile)return;
-  const btn=$('#audioSpeedBtn');btn.classList.add('loading');btn.disabled=true;
-  const rate=parseFloat($('#audioSpeedRate').value);
-  try{
-    const f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return}
-    const ext=audioSpeedFile.file.name.split('.').pop();
-    await f.writeFile('input.'+ext,new Uint8Array(await audioSpeedFile.file.arrayBuffer()));
-    // atempo filter: uses rubberband for pitch-preserving speed change
-    if(rate<0.5||rate>2)await f.exec(['-i','input.'+ext,'-filter:a','atempo='+rate,'-vn','output.'+ext]);
-    else await f.exec(['-i','input.'+ext,'-filter:a','atempo='+rate,'-vn','output.'+ext]);
-    const out=await f.readFile('output.'+ext);
-    const newName=audioSpeedFile.file.name.replace(/\.([^.]+)$/,'_'+rate+'x.$1');
-    downloadBlob(new Blob([out],{type:audioSpeedFile.file.type||'audio/'+ext}),newName);
-    toast(`✅ 已调整至 ${rate}x 倍速`);
-  }catch(err){toast('倍速失败: '+(err.message||'未知错误'),true)}
-  finally{btn.classList.remove('loading');btn.disabled=false;}
-}));
-
-// ==================== FINAL INIT ====================
+// ==================== INIT ====================
 switchTab('merge');
 })();
 </script>
