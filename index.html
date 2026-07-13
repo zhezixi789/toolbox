@@ -346,6 +346,8 @@ body{
       <button class="side-group-title" data-group="audio"><span>🎵 音频工具</span><span class="sg-arrow">▶</span></button>
       <div class="side-group-items" id="group-audio" style="display:none">
         <button class="side-tab" data-tab="audio-convert"><span class="tab-icon">🔄</span>格式转换</button>
+        <button class="side-tab" data-tab="audio-trim"><span class="tab-icon">✂️</span>音频裁剪</button>
+        <button class="side-tab" data-tab="audio-speed"><span class="tab-icon">⏩</span>音频倍速</button>
       </div>
     </div>
     <button class="side-gear-btn" id="gearBtn" title="编辑工具显示/隐藏">⚙️</button>
@@ -627,7 +629,63 @@ body{
     </div>
   </div>
 
-  <!-- === TAB: AUDIO CONVERT === -->
+  <!-- === TAB: AUDIO TRIM === -->
+  <div class="tool-panel" id="panel-audio-trim" style="display:none">
+    <div class="empty-state visible" id="audioTrimEmpty">拖入一个音频文件，裁剪片段</div>
+    <div class="audio-config" id="audioTrimConfig" style="display:none;flex-direction:column;gap:12px">
+      <div class="file-info-bar visible" style="margin:0">
+        <div style="font-size:22px;flex-shrink:0">🎵</div>
+        <div class="fi-details"><div class="fi-name" id="audioTrimName"></div><div class="fi-meta" id="audioTrimMeta"></div></div>
+        <button class="fi-remove" id="audioTrimRemove">✕</button>
+      </div>
+      <audio id="audioTrimPlayer" controls style="width:100%;border-radius:8px"></audio>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:13px;color:var(--text-secondary)">开始：</span>
+          <input type="text" id="audioTrimStart" value="00:00" placeholder="mm:ss" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:monospace">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:13px;color:var(--text-secondary)">结束：</span>
+          <input type="text" id="audioTrimEnd" value="00:30" placeholder="mm:ss" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:monospace">
+        </div>
+        <span style="font-size:11px;color:var(--text-muted)">格式 mm:ss（如 01:30 = 1分30秒）</span>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn btn-primary" id="audioTrimBtn" disabled>
+        <span class="btn-label">裁剪并下载</span><span class="btn-spinner"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- === TAB: AUDIO SPEED === -->
+  <div class="tool-panel" id="panel-audio-speed" style="display:none">
+    <div class="empty-state visible" id="audioSpeedEmpty">拖入一个音频文件，调整播放速度</div>
+    <div class="audio-config" id="audioSpeedConfig" style="display:none;flex-direction:column;gap:12px">
+      <div class="file-info-bar visible" style="margin:0">
+        <div style="font-size:22px;flex-shrink:0">🎵</div>
+        <div class="fi-details"><div class="fi-name" id="audioSpeedName"></div><div class="fi-meta" id="audioSpeedMeta"></div></div>
+        <button class="fi-remove" id="audioSpeedRemove">✕</button>
+      </div>
+      <audio id="audioSpeedPlayer" controls style="width:100%;border-radius:8px"></audio>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text-secondary)">倍速：</span>
+        <select id="audioSpeedRate" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
+          <option value="0.5">0.5x（慢放）</option>
+          <option value="0.75">0.75x（略慢）</option>
+          <option value="1.25">1.25x（略快）</option>
+          <option value="1.5" selected>1.5x（快放）</option>
+          <option value="2.0">2.0x（倍速）</option>
+        </select>
+        <span style="font-size:11px;color:var(--text-muted)">保持音调不变</span>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn btn-primary" id="audioSpeedBtn" disabled>
+        <span class="btn-label">调整倍速并下载</span><span class="btn-spinner"></span>
+      </button>
+    </div>
+  </div>
   <div class="tool-panel" id="panel-audio-convert" style="display:none">
     <div class="empty-state visible" id="audioEmpty">拖入音频文件（MP3/WAV/FLAC/AAC/OGG/M4A），批量转换格式</div>
     <div class="audio-config" id="audioConfig" style="display:none;flex-direction:column;gap:12px">
@@ -946,7 +1004,7 @@ function switchTab(tab){
 
   // Update file input accept/multiple
   if(tab==='merge'||tab==='img2pdf'||tab==='audio-convert')fileInput.multiple=true;else fileInput.multiple=false;
-  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
+  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert'||tab==='audio-trim'||tab==='audio-speed')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
 
   // Refresh tab-specific UI
   if(tab==='merge')refreshMergeUI();
@@ -960,6 +1018,8 @@ function switchTab(tab){
   else if(tab==='watermark')refreshWatermarkUI();
   else if(tab==='pagenum')refreshPagenumUI();
   else if(tab==='audio-convert')refreshAudioUI();
+  else if(tab==='audio-trim')refreshAudioTrimUI();
+  else if(tab==='audio-speed')refreshAudioSpeedUI();
 
   // Drop zone has-file class
   updateDropZoneState();
@@ -1160,8 +1220,14 @@ function handleDrop(fileList){
     status('路由到图转PDF');
     addImageFiles(pdfs);
   }else if(activeTab==='audio-convert'){
-    status('路由到音频工具');
+    status('路由到音频转换');
     addAudioFiles(pdfs);
+  }else if(activeTab==='audio-trim'){
+    status('路由到音频裁剪');
+    handleAudioSingle(pdfs[0],'trim');
+  }else if(activeTab==='audio-speed'){
+    status('路由到音频倍速');
+    handleAudioSingle(pdfs[0],'speed');
   }else{
     status('路由到单文件处理: '+pdfs[0].name);
     handleSingleFile(pdfs[0]);
@@ -2572,6 +2638,84 @@ $('#audioConvertBtn').addEventListener('click',()=>payThen(async()=>{
     toast(`✅ 已转换 ${results.length} 个音频文件`);
   }catch(err){console.error(err);status('转换失败: '+(err.message||err),true);toast('转换失败: '+(err.message||'未知错误'),true)}
   finally{progress.style.display='none';btn.classList.remove('loading');btn.disabled=false;}
+}));
+
+// ==================== AUDIO TRIM & SPEED TABS ====================
+let audioTrimFile=null,audioSpeedFile=null;
+
+function parseTime(s){
+  const parts=s.split(':').map(Number);
+  if(parts.length===2)return parts[0]*60+(parts[1]||0);
+  return parts[0]||0;
+}
+function formatTime(sec){const m=Math.floor(sec/60),s=Math.floor(sec%60);return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`}
+
+async function handleAudioSingle(file,mode){
+  if(!file.type.startsWith('audio/')&&!/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(file.name)){toast('请上传音频文件',true);return}
+  const url=URL.createObjectURL(file);
+  if(mode==='trim'){
+    audioTrimFile={file,url};refreshAudioTrimUI();
+  }else{
+    audioSpeedFile={file,url};refreshAudioSpeedUI();
+  }
+}
+
+function refreshAudioTrimUI(){
+  const empty=$('#audioTrimEmpty');const config=$('#audioTrimConfig');const btn=$('#audioTrimBtn');
+  if(!audioTrimFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return}
+  empty.classList.remove('visible');config.style.display='flex';btn.disabled=false;
+  $('#audioTrimName').textContent=audioTrimFile.file.name;
+  $('#audioTrimMeta').textContent=`${getAudioFormat(audioTrimFile.file.name)} · ${formatSize(audioTrimFile.file.size)}`;
+  const player=$('#audioTrimPlayer');player.src=audioTrimFile.url;
+  player.onloadedmetadata=()=>{$('#audioTrimEnd').value=formatTime(player.duration)};
+}
+$('#audioTrimRemove').addEventListener('click',()=>{if(audioTrimFile)URL.revokeObjectURL(audioTrimFile.url);audioTrimFile=null;refreshAudioTrimUI()});
+$('#audioTrimBtn').addEventListener('click',()=>payThen(async()=>{
+  if(!audioTrimFile)return;
+  const btn=$('#audioTrimBtn');btn.classList.add('loading');btn.disabled=true;
+  try{
+    const f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return}
+    const start=parseTime($('#audioTrimStart').value);
+    const end=parseTime($('#audioTrimEnd').value);
+    if(end<=start){toast('结束时间必须大于开始时间',true);return}
+    const dur=end-start;
+    const ext=audioTrimFile.file.name.split('.').pop();
+    await f.writeFile('input.'+ext,new Uint8Array(await audioTrimFile.file.arrayBuffer()));
+    await f.exec(['-i','input.'+ext,'-ss',String(start),'-t',String(dur),'-c','copy','output.'+ext]);
+    const out=await f.readFile('output.'+ext);
+    const newName=audioTrimFile.file.name.replace(/\.([^.]+)$/,'_裁剪.$1');
+    downloadBlob(new Blob([out],{type:audioTrimFile.file.type||'audio/'+ext}),newName);
+    toast(`✅ 已裁剪 ${formatTime(start)} 至 ${formatTime(end)}`);
+  }catch(err){toast('裁剪失败: '+(err.message||'未知错误'),true)}
+  finally{btn.classList.remove('loading');btn.disabled=false;}
+}));
+
+function refreshAudioSpeedUI(){
+  const empty=$('#audioSpeedEmpty');const config=$('#audioSpeedConfig');const btn=$('#audioSpeedBtn');
+  if(!audioSpeedFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return}
+  empty.classList.remove('visible');config.style.display='flex';btn.disabled=false;
+  $('#audioSpeedName').textContent=audioSpeedFile.file.name;
+  $('#audioSpeedMeta').textContent=`${getAudioFormat(audioSpeedFile.file.name)} · ${formatSize(audioSpeedFile.file.size)}`;
+  $('#audioSpeedPlayer').src=audioSpeedFile.url;
+}
+$('#audioSpeedRemove').addEventListener('click',()=>{if(audioSpeedFile)URL.revokeObjectURL(audioSpeedFile.url);audioSpeedFile=null;refreshAudioSpeedUI()});
+$('#audioSpeedBtn').addEventListener('click',()=>payThen(async()=>{
+  if(!audioSpeedFile)return;
+  const btn=$('#audioSpeedBtn');btn.classList.add('loading');btn.disabled=true;
+  const rate=parseFloat($('#audioSpeedRate').value);
+  try{
+    const f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return}
+    const ext=audioSpeedFile.file.name.split('.').pop();
+    await f.writeFile('input.'+ext,new Uint8Array(await audioSpeedFile.file.arrayBuffer()));
+    // atempo filter: uses rubberband for pitch-preserving speed change
+    if(rate<0.5||rate>2)await f.exec(['-i','input.'+ext,'-filter:a','atempo='+rate,'-vn','output.'+ext]);
+    else await f.exec(['-i','input.'+ext,'-filter:a','atempo='+rate,'-vn','output.'+ext]);
+    const out=await f.readFile('output.'+ext);
+    const newName=audioSpeedFile.file.name.replace(/\.([^.]+)$/,'_'+rate+'x.$1');
+    downloadBlob(new Blob([out],{type:audioSpeedFile.file.type||'audio/'+ext}),newName);
+    toast(`✅ 已调整至 ${rate}x 倍速`);
+  }catch(err){toast('倍速失败: '+(err.message||'未知错误'),true)}
+  finally{btn.classList.remove('loading');btn.disabled=false;}
 }));
 
 // ==================== FINAL INIT ====================
