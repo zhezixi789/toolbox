@@ -2641,7 +2641,7 @@ async function initFFmpeg(){
     if(!FFmpegWASM){throw new Error('FFmpeg CDN 未加载，请刷新页面');}
     var FFmpeg=FFmpegWASM.FFmpeg;
     _ffmpeg=new FFmpeg();
-    await _ffmpeg.load();
+    await _ffmpeg.load({corePath:'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js'});
     status('音频引擎就绪 ✅');
     return _ffmpeg;
   }catch(e){status('音频引擎加载失败: '+e.message,true);_ffmpegLoading=false;return null;}
