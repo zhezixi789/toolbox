@@ -2718,6 +2718,69 @@ document.querySelector('#audioConvertBtn').addEventListener('click',function(){p
 });});
 
 
+
+// ==================== AUDIO TRIM & SPEED ====================
+var audioTrimFile=null,audioSpeedFile=null;
+function parseTime(s){var p=s.split(':').map(Number);if(p.length===2)return p[0]*60+(p[1]||0);return p[0]||0;}
+function formatTime(sec){var m=Math.floor(sec/60),s=Math.floor(sec%60);return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+async function handleAudioSingle(file,mode){
+  if(!file.type.startsWith('audio/')&&!/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(file.name)){toast('请上传音频文件',true);return;}
+  var url=URL.createObjectURL(file);
+  if(mode==='trim'){audioTrimFile={file:file,url:url};refreshAudioTrimUI();}
+  else{audioSpeedFile={file:file,url:url};refreshAudioSpeedUI();}
+}
+function refreshAudioTrimUI(){
+  var empty=document.querySelector('#audioTrimEmpty'),config=document.querySelector('#audioTrimConfig'),btn=document.querySelector('#audioTrimBtn');
+  if(!audioTrimFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return;}
+  empty.classList.remove('visible');config.style.display='flex';btn.disabled=false;
+  document.querySelector('#audioTrimName').textContent=audioTrimFile.file.name;
+  document.querySelector('#audioTrimMeta').textContent=getAudioFormat(audioTrimFile.file.name)+' · '+formatSize(audioTrimFile.file.size);
+  var player=document.querySelector('#audioTrimPlayer');player.src=audioTrimFile.url;
+  player.onloadedmetadata=function(){document.querySelector('#audioTrimEnd').value=formatTime(player.duration);};
+}
+document.querySelector('#audioTrimRemove').addEventListener('click',function(){if(audioTrimFile)URL.revokeObjectURL(audioTrimFile.url);audioTrimFile=null;refreshAudioTrimUI();});
+document.querySelector('#audioTrimBtn').addEventListener('click',function(){payThen(async function(){
+  if(!audioTrimFile)return;
+  var btn=document.querySelector('#audioTrimBtn');btn.classList.add('loading');btn.disabled=true;
+  try{
+    var f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return;}
+    var start=parseTime(document.querySelector('#audioTrimStart').value);
+    var end=parseTime(document.querySelector('#audioTrimEnd').value);
+    if(end<=start){toast('结束时间必须大于开始时间',true);return;}
+    var dur=end-start,ext=audioTrimFile.file.name.split('.').pop();
+    await f.writeFile('input.'+ext,new Uint8Array(await audioTrimFile.file.arrayBuffer()));
+    await f.exec(['-i','input.'+ext,'-ss',String(start),'-t',String(dur),'-c','copy','output.'+ext]);
+    var out=await f.readFile('output.'+ext);
+    downloadBlob(new Blob([out],{type:audioTrimFile.file.type||'audio/'+ext}),audioTrimFile.file.name.replace(/\.([^.]+)$/,'_裁剪.$1'));
+    toast('✅ 已裁剪 '+formatTime(start)+' 至 '+formatTime(end));
+  }catch(err){toast('裁剪失败: '+(err.message||'未知错误'),true);}
+  finally{btn.classList.remove('loading');btn.disabled=false;}
+});});
+function refreshAudioSpeedUI(){
+  var empty=document.querySelector('#audioSpeedEmpty'),config=document.querySelector('#audioSpeedConfig'),btn=document.querySelector('#audioSpeedBtn');
+  if(!audioSpeedFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return;}
+  empty.classList.remove('visible');config.style.display='flex';btn.disabled=false;
+  document.querySelector('#audioSpeedName').textContent=audioSpeedFile.file.name;
+  document.querySelector('#audioSpeedMeta').textContent=getAudioFormat(audioSpeedFile.file.name)+' · '+formatSize(audioSpeedFile.file.size);
+  document.querySelector('#audioSpeedPlayer').src=audioSpeedFile.url;
+}
+document.querySelector('#audioSpeedRemove').addEventListener('click',function(){if(audioSpeedFile)URL.revokeObjectURL(audioSpeedFile.url);audioSpeedFile=null;refreshAudioSpeedUI();});
+document.querySelector('#audioSpeedBtn').addEventListener('click',function(){payThen(async function(){
+  if(!audioSpeedFile)return;
+  var btn=document.querySelector('#audioSpeedBtn');btn.classList.add('loading');btn.disabled=true;
+  var rate=parseFloat(document.querySelector('#audioSpeedRate').value);
+  try{
+    var f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return;}
+    var ext=audioSpeedFile.file.name.split('.').pop();
+    await f.writeFile('input.'+ext,new Uint8Array(await audioSpeedFile.file.arrayBuffer()));
+    await f.exec(['-i','input.'+ext,'-filter:a','atempo='+rate,'-vn','output.'+ext]);
+    var out=await f.readFile('output.'+ext);
+    downloadBlob(new Blob([out],{type:audioSpeedFile.file.type||'audio/'+ext}),audioSpeedFile.file.name.replace(/\.([^.]+)$/,'_'+rate+'x.$1'));
+    toast('✅ 已调整至 '+rate+'x 倍速');
+  }catch(err){toast('倍速失败: '+(err.message||'未知错误'),true);}
+  finally{btn.classList.remove('loading');btn.disabled=false;}
+});});
+
 // ==================== INIT ====================
 switchTab('merge');
 })();
