@@ -643,6 +643,60 @@ body{
   </div>
 
 
+  <!-- === TAB: AUDIO TRIM === -->
+  <div class="tool-panel" id="panel-audio-trim" style="display:none">
+    <div class="empty-state visible" id="audioTrimEmpty">拖入一个音频文件，裁剪片段</div>
+    <div class="audio-config" id="audioTrimConfig" style="display:none;flex-direction:column;gap:12px">
+      <div class="file-info-bar visible" style="margin:0">
+        <div style="font-size:22px;flex-shrink:0">🎵</div>
+        <div class="fi-details"><div class="fi-name" id="audioTrimName"></div><div class="fi-meta" id="audioTrimMeta"></div></div>
+        <button class="fi-remove" id="audioTrimRemove">✕</button>
+      </div>
+      <audio id="audioTrimPlayer" controls style="width:100%;border-radius:8px"></audio>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text-secondary)">开始：</span>
+        <input type="text" id="audioTrimStart" value="00:00" placeholder="mm:ss" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:monospace">
+        <span style="font-size:13px;color:var(--text-secondary)">结束：</span>
+        <input type="text" id="audioTrimEnd" value="00:30" placeholder="mm:ss" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:monospace">
+        <span style="font-size:11px;color:var(--text-muted)">格式 mm:ss</span>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn btn-primary" id="audioTrimBtn" disabled>
+        <span class="btn-label">裁剪并下载</span><span class="btn-spinner"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- === TAB: AUDIO SPEED === -->
+  <div class="tool-panel" id="panel-audio-speed" style="display:none">
+    <div class="empty-state visible" id="audioSpeedEmpty">拖入一个音频文件，调整播放速度</div>
+    <div class="audio-config" id="audioSpeedConfig" style="display:none;flex-direction:column;gap:12px">
+      <div class="file-info-bar visible" style="margin:0">
+        <div style="font-size:22px;flex-shrink:0">🎵</div>
+        <div class="fi-details"><div class="fi-name" id="audioSpeedName"></div><div class="fi-meta" id="audioSpeedMeta"></div></div>
+        <button class="fi-remove" id="audioSpeedRemove">✕</button>
+      </div>
+      <audio id="audioSpeedPlayer" controls style="width:100%;border-radius:8px"></audio>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text-secondary)">倍速：</span>
+        <select id="audioSpeedRate" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
+          <option value="0.5">0.5x（慢放）</option>
+          <option value="0.75">0.75x（略慢）</option>
+          <option value="1.25">1.25x（略快）</option>
+          <option value="1.5" selected>1.5x（快放）</option>
+          <option value="2.0">2.0x（倍速）</option>
+        </select>
+        <span style="font-size:11px;color:var(--text-muted)">保持音调不变</span>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn btn-primary" id="audioSpeedBtn" disabled>
+        <span class="btn-label">调整倍速并下载</span><span class="btn-spinner"></span>
+      </button>
+    </div>
+  </div>
+
   <!-- === TAB: AUDIO CONVERT === -->
   <div class="tool-panel" id="panel-audio-convert" style="display:none">
     <div class="empty-state visible" id="audioEmpty">拖入音频文件（MP3/WAV/FLAC/AAC/OGG/M4A），批量转换格式</div>
@@ -974,6 +1028,8 @@ function switchTab(tab){
     watermark:['拖拽 PDF 文件到此处','给 PDF 添加文字水印'],
     pagenum:['拖拽 PDF 文件到此处','给 PDF 添加页码'],
     'audio-convert':['拖拽音频文件到此处','批量转换音频格式 · 支持 MP3/WAV/FLAC/AAC/OGG/M4A'],
+    'audio-trim':['拖拽音频文件到此处','裁剪音频片段'],
+    'audio-speed':['拖拽音频文件到此处','调整音频播放速度'],
   };
   const [t,s,extra]=texts[tab];
   dzTitle.textContent=t;
@@ -983,7 +1039,7 @@ function switchTab(tab){
   if(tab==='merge'||tab==='img2pdf')fileInput.multiple=true;else fileInput.multiple=false;
   if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else fileInput.accept='.pdf,application/pdf';
 
-  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
+  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert'||tab==='audio-trim'||tab==='audio-speed')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
   // Refresh tab-specific UI
   if(tab==='merge')refreshMergeUI();
   else if(tab==='split')refreshSplitUI();
@@ -996,6 +1052,8 @@ function switchTab(tab){
   else if(tab==='watermark')refreshWatermarkUI();
   else if(tab==='pagenum')refreshPagenumUI();
   else if(tab==='audio-convert')refreshAudioUI();
+  else if(tab==='audio-trim')refreshAudioTrimUI();
+  else if(tab==='audio-speed')refreshAudioSpeedUI();
 
   // Drop zone has-file class
   updateDropZoneState();
@@ -1304,6 +1362,12 @@ function handleDrop(fileList){
   }else if(activeTab==='audio-convert'){
     status('路由到音频转换');
     addAudioFiles(pdfs);
+  }else if(activeTab==='audio-trim'){
+    status('路由到音频裁剪');
+    handleAudioSingle(pdfs[0],'trim');
+  }else if(activeTab==='audio-speed'){
+    status('路由到音频倍速');
+    handleAudioSingle(pdfs[0],'speed');
   }else{
     status('路由到单文件处理: '+pdfs[0].name);
     handleSingleFile(pdfs[0]);
