@@ -2,6 +2,14 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta name="description" content="万能办公 - 免费在线PDF工具箱，支持合并、拆分、压缩、转图片、水印、页码。无需上传服务器，本地处理保护隐私。">
+<meta name="keywords" content="万能办公,PDF工具,PDF合并,PDF拆分,PDF压缩,在线PDF">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://www.toolboxplus.cn/">
+<meta property="og:title" content="万能办公 - 在线PDF处理工具">
+<meta property="og:description" content="万能办公，免费在线PDF工具箱，本地处理保护隐私">
+<meta property="og:url" content="https://www.toolboxplus.cn/">
+<meta property="og:type" content="website">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>万能办公 - 在线PDF处理工具 | 合并拆分压缩水印转图片</title>
 <meta name="description" content="万能办公 - 免费在线PDF工具箱，支持PDF合并、拆分、删页、旋转、排序、压缩、转图片、图片转PDF、加水印、加页码。无需上传服务器，本地处理保护隐私，安全快捷。">
@@ -15,6 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js CDN failed')"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="console.warn('JSZip CDN failed')"></script>
+<script async src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js" onerror="console.warn('FFmpeg CDN failed')"></script>
 <style>
 :root {
   --primary: #6366F1;
@@ -289,6 +298,24 @@ body{
 }
 
 /* Payment modal */
+.pay-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;display:none;align-items:center;justify-content:center}
+.pay-overlay.show{display:flex}
+.pay-card{background:var(--surface);border-radius:var(--radius);padding:32px 28px;text-align:center;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.pay-card h3{font-size:20px;margin-bottom:4px}
+.pay-card .pay-price{font-size:36px;font-weight:800;color:var(--primary);margin:12px 0}
+.pay-card .pay-price small{font-size:16px;font-weight:500}
+.pay-card .pay-qr{width:180px;height:180px;margin:16px auto;border:2px solid var(--border);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;background:#fff;position:relative;overflow:hidden}
+.pay-card .pay-qr .qr-sim{text-align:center;color:var(--text-muted);font-size:12px;line-height:1.6}
+.pay-card .pay-qr .qr-sim .qr-icon{font-size:60px;display:block}
+.pay-card .pay-status{font-size:13px;color:var(--text-secondary);margin:8px 0;min-height:20px}
+.pay-card .pay-status.success{color:var(--success);font-weight:600}
+.pay-card .pay-actions{display:flex;gap:8px;margin-top:16px}
+.pay-card .pay-actions button{flex:1;padding:10px;border-radius:var(--radius-xs);font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+.pay-card .pay-btn-demo{background:var(--primary);color:#fff}
+.pay-card .pay-btn-demo:hover{background:var(--primary-hover)}
+.pay-card .pay-btn-cancel{background:#F1F5F9;color:var(--text-secondary)}
+.pay-card .pay-btn-cancel:hover{background:#E2E8F0}
+
 .pay-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;display:none;align-items:center;justify-content:center}
 .pay-overlay.show{display:flex}
 .pay-card{background:var(--surface);border-radius:var(--radius);padding:32px 28px;text-align:center;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.2)}
@@ -615,6 +642,47 @@ body{
     </div>
   </div>
 
+
+  <!-- === TAB: AUDIO CONVERT === -->
+  <div class="tool-panel" id="panel-audio-convert" style="display:none">
+    <div class="empty-state visible" id="audioEmpty">拖入音频文件（MP3/WAV/FLAC/AAC/OGG/M4A），批量转换格式</div>
+    <div class="audio-config" id="audioConfig" style="display:none;flex-direction:column;gap:12px">
+      <div class="audio-file-list-section" id="audioListSection">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px">
+          <span style="font-size:13px;color:var(--text-secondary)" id="audioCount"></span>
+          <button class="ml-clear" id="audioClear">清空</button>
+        </div>
+        <div class="merge-list" id="audioList"></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap">转为：</span>
+        <select id="audioFormat" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
+          <option value="mp3">MP3（通用、体积小）</option>
+          <option value="wav">WAV（无损、体积大）</option>
+          <option value="aac">AAC（苹果优化）</option>
+          <option value="flac">FLAC（无损压缩）</option>
+          <option value="ogg">OGG（开源格式）</option>
+          <option value="m4a">M4A（手机录音）</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:12px;color:var(--text-muted)">码率：</span>
+          <select id="audioBitrate" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            <option value="128k">128kbps（标准）</option>
+            <option value="192k" selected>192kbps（高质量）</option>
+            <option value="256k">256kbps（极高）</option>
+            <option value="320k">320kbps（最佳）</option>
+          </select>
+        </div>
+      </div>
+      <div id="audioProgress" style="display:none;font-size:13px;color:var(--text-secondary);padding:8px 12px;background:#F8FAFC;border-radius:8px"></div>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn btn-primary" id="audioConvertBtn" disabled>
+        <span class="btn-label">转换并下载</span><span class="btn-spinner"></span>
+      </button>
+    </div>
+  </div>
+
   <!-- === TAB: PAGE NUMBERS === -->
   <div class="tool-panel" id="panel-pagenum" style="display:none">
     <div class="file-info-bar" id="pagenumFileBar">
@@ -681,6 +749,22 @@ body{
         <span class="qr-icon">📱</span>
         演示模式<br>点击下方按钮模拟支付
       </div>
+    </div>
+    <div class="pay-status" id="payStatus">正在等待支付…</div>
+    <div class="pay-actions">
+      <button class="pay-btn-demo" id="payDemoBtn">✅ 模拟支付</button>
+      <button class="pay-btn-cancel" id="payCancelBtn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="pay-overlay" id="payOverlay">
+  <div class="pay-card">
+    <h3>🔐 扫码支付后下载</h3>
+    <div class="pay-price"><small>¥</small>0.50</div>
+    <div class="pay-qr" id="payQr">
+      <div class="qr-sim"><span class="qr-icon">📱</span>演示模式<br>点击下方按钮模拟支付</div>
     </div>
     <div class="pay-status" id="payStatus">正在等待支付…</div>
     <div class="pay-actions">
@@ -889,6 +973,7 @@ function switchTab(tab){
     img2pdf:['拖拽图片文件到此处','将图片合成为 PDF','支持 JPG/PNG/WebP'],
     watermark:['拖拽 PDF 文件到此处','给 PDF 添加文字水印'],
     pagenum:['拖拽 PDF 文件到此处','给 PDF 添加页码'],
+    'audio-convert':['拖拽音频文件到此处','批量转换音频格式 · 支持 MP3/WAV/FLAC/AAC/OGG/M4A'],
   };
   const [t,s,extra]=texts[tab];
   dzTitle.textContent=t;
@@ -898,6 +983,7 @@ function switchTab(tab){
   if(tab==='merge'||tab==='img2pdf')fileInput.multiple=true;else fileInput.multiple=false;
   if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else fileInput.accept='.pdf,application/pdf';
 
+  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
   // Refresh tab-specific UI
   if(tab==='merge')refreshMergeUI();
   else if(tab==='split')refreshSplitUI();
@@ -909,12 +995,119 @@ function switchTab(tab){
   else if(tab==='img2pdf')refreshImg2pdfUI();
   else if(tab==='watermark')refreshWatermarkUI();
   else if(tab==='pagenum')refreshPagenumUI();
+  else if(tab==='audio-convert')refreshAudioUI();
 
   // Drop zone has-file class
   updateDropZoneState();
 }
 
 $$('.side-tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+// Sidebar group collapse/expand
+$$('.side-group-title').forEach(btn=>btn.addEventListener('click',function(){
+  const group=this.dataset.group;
+  const items=document.querySelector('#group-'+group);
+  if(!items)return;
+  const isOpen=items.style.display!=='none';
+  if(isOpen){items.style.display='none';this.classList.remove('open');}
+  else{items.style.display='';this.classList.add('open');}
+}));
+
+// Sidebar hide/show + drag reorder
+(function(){
+var _hidden={},_order={},_editMode=false,_allOverflows=[];
+function _getHidden(g){try{return new Set(JSON.parse(localStorage.getItem('tb_h_'+g)))||new Set();}catch(e){return new Set();}}
+function _setHidden(g,s){localStorage.setItem('tb_h_'+g,JSON.stringify([...s]));}
+function _getOrder(g){try{return JSON.parse(localStorage.getItem('tb_o_'+g))||[];}catch(e){return[];}}
+function _setOrder(g,o){localStorage.setItem('tb_o_'+g,JSON.stringify(o));}
+$$('.side-group').forEach(function(groupEl){
+  var items=groupEl.querySelector('.side-group-items');
+  if(!items||!items.id)return;
+  var group=items.id.replace('group-','');
+  if(group==='ppt'||group==='excel')return;
+  var overflow=document.createElement('div');
+  overflow.className='side-overflow';
+  overflow.id='overflow-'+group;
+  items.after(overflow);
+  _allOverflows.push(overflow);
+  var hiddenSet=_getHidden(group);
+  var allTabs=Array.from(items.querySelectorAll('.side-tab'));
+  allTabs.forEach(function(tab){
+    tab.draggable=true;
+    var btn=document.createElement('button');
+    btn.className='st-hide';
+    btn.innerHTML='-';
+    btn.addEventListener('click',function(e){
+      e.stopPropagation();
+      if(hiddenSet.has(tab.dataset.tab)){hiddenSet.delete(tab.dataset.tab);items.appendChild(tab);btn.innerHTML='-';}
+      else{hiddenSet.add(tab.dataset.tab);overflow.appendChild(tab);btn.innerHTML='+';}
+      _setHidden(group,hiddenSet);_saveOrder();
+    });
+    tab.appendChild(btn);
+  });
+  hiddenSet.forEach(function(name){
+    var t=allTabs.find(function(x){return x.dataset.tab===name;});
+    if(t){overflow.appendChild(t);t.querySelector('.st-hide').innerHTML='+';}
+  });
+  var saved=_getOrder(group);
+  if(saved.length){var m=new Map(allTabs.map(function(t){return[t.dataset.tab,t];}));saved.forEach(function(n){var e=m.get(n);if(e&&!hiddenSet.has(n))items.appendChild(e);});}
+  function _saveOrder(){
+    var io=Array.from(items.querySelectorAll('.side-tab')).map(function(t){return t.dataset.tab;});
+    var oo=Array.from(overflow.querySelectorAll('.side-tab')).map(function(t){return t.dataset.tab;});
+    _setOrder(group,io.concat(oo));
+  }
+  var dragTab=null;
+  [items,overflow].forEach(function(el){
+    el.addEventListener('dragstart',function(e){
+      var tab=e.target.closest('.side-tab');
+      if(!tab||e.target.closest('.st-hide')){e.preventDefault();return;}
+      dragTab=tab;tab.style.opacity='0.4';e.dataTransfer.effectAllowed='move';
+    });
+    el.addEventListener('dragover',function(e){
+      e.preventDefault();
+      var tab=e.target.closest('.side-tab');
+      if(!tab||tab===dragTab)return;
+      var r=tab.getBoundingClientRect();
+      el.querySelectorAll('.side-tab').forEach(function(t){t.style.borderTop='';t.style.borderBottom='';});
+      if(e.clientY<r.top+r.height/2)tab.style.borderTop='2px solid var(--primary)';
+      else tab.style.borderBottom='2px solid var(--primary)';
+    });
+    el.addEventListener('dragleave',function(e){
+      var tab=e.target.closest('.side-tab');
+      if(tab){tab.style.borderTop='';tab.style.borderBottom='';}
+    });
+    el.addEventListener('drop',function(e){
+      e.preventDefault();
+      var tab=e.target.closest('.side-tab');
+      if(!tab||!dragTab||tab===dragTab){_clean(el);return;}
+      var r=tab.getBoundingClientRect();
+      if(e.clientY<r.top+r.height/2)el.insertBefore(dragTab,tab);
+      else el.insertBefore(dragTab,tab.nextSibling);
+      Array.from(overflow.querySelectorAll('.side-tab')).forEach(function(t){hiddenSet.add(t.dataset.tab);});
+      Array.from(items.querySelectorAll('.side-tab')).forEach(function(t){hiddenSet.delete(t.dataset.tab);});
+      _setHidden(group,hiddenSet);_saveOrder();_clean(el);
+    });
+    el.addEventListener('dragend',function(){_clean(el);});
+    function _clean(el){el.querySelectorAll('.side-tab').forEach(function(t){t.style.opacity='';t.style.borderTop='';t.style.borderBottom='';});dragTab=null;}
+  });
+});
+// Gear button
+var gearBtn=document.querySelector('#gearBtn');
+if(gearBtn)gearBtn.addEventListener('click',function(){
+  _editMode=!_editMode;
+  var sb=document.querySelector('#sidebar');
+  if(_editMode){
+    sb.classList.add('editing');this.classList.add('active');
+    _allOverflows.forEach(function(ov){ov.classList.add('open');ov.style.display='';});
+    document.querySelectorAll('.side-group-items .st-hide').forEach(function(b){b.innerHTML='-';b.style.display='';});
+    document.querySelectorAll('.side-overflow .st-hide').forEach(function(b){b.innerHTML='+';b.style.display='';});
+  }else{
+    sb.classList.remove('editing');this.classList.remove('active');
+    _allOverflows.forEach(function(ov){ov.classList.remove('open');ov.style.display='none';});
+    document.querySelectorAll('.st-hide').forEach(function(b){b.style.display='none';});
+  }
+});
+})();
+
 
 // Sidebar group collapse/expand
 $$('.side-group-title').forEach(btn=>btn.addEventListener('click',function(){
@@ -1108,6 +1301,9 @@ function handleDrop(fileList){
   }else if(activeTab==='img2pdf'){
     status('路由到图转PDF');
     addImageFiles(pdfs);
+  }else if(activeTab==='audio-convert'){
+    status('路由到音频转换');
+    addAudioFiles(pdfs);
   }else{
     status('路由到单文件处理: '+pdfs[0].name);
     handleSingleFile(pdfs[0]);
@@ -2368,6 +2564,96 @@ $('#payCancelBtn').addEventListener('click',()=>{
     pendingCallback = null;
   }
 });
+
+
+// ==================== AUDIO CONVERT TAB ====================
+var audioFiles=[],_ffmpeg=null,_ffmpegLoading=false;
+async function initFFmpeg(){
+  if(_ffmpeg)return _ffmpeg;
+  if(_ffmpegLoading)return null;
+  _ffmpegLoading=true;
+  status('正在加载音频引擎（首次约需 5 秒）…');
+  try{
+    var FFmpegWASM=window.FFmpegWASM;
+    if(!FFmpegWASM){throw new Error('FFmpeg CDN 未加载，请刷新页面');}
+    var FFmpeg=FFmpegWASM.FFmpeg;
+    _ffmpeg=new FFmpeg();
+    await _ffmpeg.load();
+    status('音频引擎就绪 ✅');
+    return _ffmpeg;
+  }catch(e){status('音频引擎加载失败: '+e.message,true);_ffmpegLoading=false;return null;}
+  finally{_ffmpegLoading=false;}
+}
+async function addAudioFiles(newFiles){
+  var audio=Array.from(newFiles).filter(function(f){return f.type.startsWith('audio/')||/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(f.name);});
+  if(!audio.length){toast('未识别到音频文件',true);return;}
+  audioFiles.push.apply(audioFiles,audio);
+  refreshAudioUI();
+}
+function getAudioFormat(name){var ext=name.split('.').pop().toLowerCase();return ext==='m4a'?'M4A':ext.toUpperCase();}
+function refreshAudioUI(){
+  var section=document.querySelector('#audioListSection');
+  var empty=document.querySelector('#audioEmpty');
+  var config=document.querySelector('#audioConfig');
+  var list=document.querySelector('#audioList');
+  var btn=document.querySelector('#audioConvertBtn');
+  var count=document.querySelector('#audioCount');
+  var hasFiles=audioFiles.length>0;
+  if(section)section.style.display=hasFiles?'flex':'none';
+  if(empty)empty.classList.toggle('visible',!hasFiles);
+  if(config)config.style.display=hasFiles?'flex':'none';
+  if(count)count.innerHTML=hasFiles?'共 <strong>'+audioFiles.length+'</strong> 个音频文件':'';
+  if(btn)btn.disabled=!hasFiles;
+  if(list){list.innerHTML='';audioFiles.forEach(function(f,i){
+    var item=document.createElement('div');item.className='merge-item';
+    item.innerHTML='<div style="flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:22px">🎵</div><div class="mi-info"><span class="mi-name">'+escapeHtml(f.name)+'</span><div class="mi-meta"><span>'+getAudioFormat(f.name)+'</span><span>'+formatSize(f.size)+'</span></div></div><button class="mi-remove" data-idx="'+i+'">✕</button>';
+    item.querySelector('.mi-remove').addEventListener('click',function(e){e.stopPropagation();audioFiles.splice(parseInt(e.currentTarget.dataset.idx),1);refreshAudioUI();});
+    list.appendChild(item);
+  });}
+}
+document.querySelector('#audioClear').addEventListener('click',function(){audioFiles=[];refreshAudioUI();});
+document.querySelector('#audioConvertBtn').addEventListener('click',function(){payThen(async function(){
+  if(!audioFiles.length)return;
+  var btn=document.querySelector('#audioConvertBtn');btn.classList.add('loading');btn.disabled=true;
+  var fmt=document.querySelector('#audioFormat').value;
+  var br=document.querySelector('#audioBitrate').value;
+  var progress=document.querySelector('#audioProgress');
+  if(progress){progress.style.display='';progress.textContent='正在初始化…';}
+  try{
+    var f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return;}
+    var results=[];
+    for(var i=0;i<audioFiles.length;i++){
+      var file=audioFiles[i];
+      if(progress)progress.textContent='转换中 '+(i+1)+'/'+audioFiles.length+'：'+file.name;
+      var inName='input_'+i+'.'+file.name.split('.').pop();
+      var outName='output_'+i+'.'+fmt;
+      await f.writeFile(inName,new Uint8Array(await file.arrayBuffer()));
+      var args=['-i',inName];
+      if(fmt==='mp3')args.push('-codec:a','libmp3lame','-b:a',br);
+      else if(fmt==='wav')args.push('-codec:a','pcm_s16le');
+      else if(fmt==='aac')args.push('-codec:a','aac','-b:a',br);
+      else if(fmt==='flac')args.push('-codec:a','flac');
+      else if(fmt==='ogg')args.push('-codec:a','libvorbis','-b:a',br);
+      else if(fmt==='m4a')args.push('-codec:a','aac','-b:a',br,'-movflags','+faststart');
+      args.push(outName);
+      await f.exec(args);
+      var outBytes=await f.readFile(outName);
+      results.push({name:file.name.replace(/\.[^.]+$/,'.'+fmt),bytes:outBytes});
+      await f.deleteFile(inName);await f.deleteFile(outName);
+    }
+    if(progress)progress.textContent='转换完成 ✅';
+    if(results.length===1){downloadBlob(new Blob([results[0].bytes],{type:'audio/'+fmt}),results[0].name);}
+    else{
+      var zip=new JSZip();
+      results.forEach(function(r){zip.file(r.name,r.bytes);});
+      var zipBlob=await zip.generateAsync({type:'blob'});
+      downloadBlob(zipBlob,'音频转换_'+timestamp()+'.zip');
+    }
+    toast('✅ 已转换 '+results.length+' 个音频文件');
+  }catch(err){console.error(err);status('转换失败: '+(err.message||err),true);toast('转换失败: '+(err.message||'未知错误'),true);}
+  finally{if(progress)progress.style.display='none';btn.classList.remove('loading');btn.disabled=false;}
+});});
+
 
 // ==================== INIT ====================
 switchTab('merge');
