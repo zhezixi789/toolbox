@@ -2215,8 +2215,9 @@ $('#pagenumBtn').addEventListener('click',()=>payThen(async()=>{
 // ==================== PAYMENT SYSTEM ====================
 const PAY_CONFIG = {
   mode: 'demo',           // 'demo' | 'live'
-  backendURL: '',         // 真实后端地址，如 'https://toolbox.vercel.app'
+  backendURL: '',         // 部署后端后填，如 'https://toolbox-api.vercel.app'
   price: 0.50,
+  vendor: 'mianbaoduo',   // 面包多
 };
 
 let pendingCallback = null;
@@ -2281,15 +2282,23 @@ async function startRealPayment(){
       overlay._timer = timer;
       $('#payDemoBtn').textContent = '⏳ 3 秒';
     }else{
-      // Real QR code
-      $('#payQr').innerHTML = `<img src="${data.qr_url}" style="width:100%;height:100%;object-fit:contain" alt="支付二维码">`;
-      $('#payStatus').textContent = '请使用微信/支付宝扫码支付 ¥0.50';
+      // Real payment via 面包多
+      if(data.pay_url){
+        // Use iframe to show payment page (supports WeChat + Alipay)
+        $('#payQr').innerHTML = `<iframe src="${data.pay_url}" style="width:100%;height:100%;border:none;border-radius:8px" sandbox="allow-scripts allow-same-origin allow-forms allow-top-navigation"></iframe>`;
+      }else{
+        $('#payQr').innerHTML = `<div class="qr-sim"><span class="qr-icon">📱</span>打开链接付款<br><a href="${data.pay_url}" target="_blank" style="color:var(--primary)">在浏览器中打开</a></div>`;
+      }
+      $('#payStatus').textContent = '请使用微信或支付宝扫码支付 ¥0.50';
+      $('#payDemoBtn').style.display = 'none';
+      $('#payCancelBtn').textContent = '我已完成付款';
       pollPaymentStatus(data.orderId);
     }
   }catch(err){
     $('#payStatus').textContent = '创建订单失败: '+err.message;
     $('#payStatus').className = 'pay-status error';
     $('#payDemoBtn').style.display = 'none';
+    $('#payCancelBtn').textContent = '取消';
   }
 }
 
@@ -2340,8 +2349,13 @@ $('#payDemoBtn').addEventListener('click',()=>{
 $('#payCancelBtn').addEventListener('click',()=>{
   const overlay = $('#payOverlay');
   clearInterval(overlay._timer);
-  overlay.classList.remove('show');
-  pendingCallback = null;
+  // In live mode with backend, retry checking payment status
+  if(PAY_CONFIG.mode==='live' && PAY_CONFIG.backendURL){
+    completeRealPayment();
+  }else{
+    overlay.classList.remove('show');
+    pendingCallback = null;
+  }
 });
 
 // ==================== INIT ====================
