@@ -368,6 +368,14 @@ body{
         <div class="side-coming">即将推出…</div>
       </div>
     </div>
+    <div class="side-group">
+      <button class="side-group-title" data-group="audio" onclick="var el=document.getElementById('group-audio');if(el.style.display=='none'){el.style.display='';this.classList.add('open')}else{el.style.display='none';this.classList.remove('open')}"><span>🎵 音频工具</span><span class="sg-arrow">▶</span></button>
+      <div class="side-group-items" id="group-audio" style="display:none">
+        <button class="side-tab" data-tab="audio-convert"><span class="tab-icon">🔄</span>格式转换</button>
+        <button class="side-tab" data-tab="audio-trim"><span class="tab-icon">✂️</span>音频裁剪</button>
+        <button class="side-tab" data-tab="audio-speed"><span class="tab-icon">⏩</span>音频倍速</button>
+      </div>
+    </div>
     <button class="side-gear-btn" id="gearBtn" title="编辑工具显示/隐藏">⚙️</button>
   </div>
 
