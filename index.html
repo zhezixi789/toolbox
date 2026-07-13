@@ -514,6 +514,7 @@ body{
         <span id="compressQualityLabel" style="font-size:13px;font-weight:600;min-width:36px">60%</span>
       </div>
       <div id="compressInfo" style="font-size:12px;color:var(--text-muted)"></div>
+      <canvas id="compressPreview" width="200" height="280" style="border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;display:none;max-width:100%"></canvas>
     </div>
     <div class="actions" style="margin-top:8px">
       <button class="btn btn-primary" id="compressBtn" disabled>
@@ -575,6 +576,10 @@ body{
           <option value="contain">完整显示</option>
           <option value="cover">铺满页面</option>
         </select>
+      </div>
+      <div class="page-grid-section" id="img2pdfGridSection" style="display:none">
+        <div class="page-grid-header"><span class="pg-label" id="img2pdfGridLabel">页面布局预览</span></div>
+        <div class="page-grid" id="img2pdfGrid"></div>
       </div>
     </div>
     <div class="actions" style="margin-top:8px">
@@ -1846,11 +1851,34 @@ $('#compressQuality').addEventListener('input',function(){
   compressQuality=parseInt(this.value);
   $('#compressQualityLabel').textContent=compressQuality+'%';
   updateCompressInfo();
+  updateCompressPreview();
 });
 function updateCompressInfo(){
   if(!uploadedFile)return;
   const est=Math.max((uploadedFile.size*compressQuality/100*0.7)|0,uploadedFile.size*0.05);
-  $('#compressInfo').textContent=`原始大小：${formatSize(uploadedFile.size)} → 预计压缩后约 ${formatSize(est)}`;
+  $('#compressInfo').textContent=`原始大小：${formatSize(uploadedFile.size)} → 预计压缩后约 ${formatSize(est)}（质量 ${compressQuality}%）`;
+}
+function updateCompressPreview(){
+  const cvs=$('#compressPreview');if(!cvs||!uploadedFile||!thumbCache.length){cvs.style.display='none';return}
+  cvs.style.display='';
+  // Show first page with simulated quality via canvas scaling
+  const img=new Image();
+  img.onload=()=>{
+    const ctx=cvs.getContext('2d');
+    // Downscale then upscale to simulate quality loss
+    const scale=compressQuality/100;
+    const w=Math.round(img.width*scale*0.6);
+    const h=Math.round(img.height*scale*0.6);
+    const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
+    tmp.getContext('2d').drawImage(img,0,0,w,h);
+    cvs.width=200;cvs.height=Math.round(200/img.width*img.height);
+    ctx.drawImage(tmp,0,0,cvs.width,cvs.height);
+    // Label
+    ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,cvs.height-20,cvs.width,20);
+    ctx.fillStyle='#fff';ctx.font='11px sans-serif';ctx.textAlign='center';
+    ctx.fillText(`质量 ${compressQuality}% — 预览`,cvs.width/2,cvs.height-5);
+  };
+  img.src=thumbCache[0];
 }
 function refreshCompressUI(){
   const bar=$('#compressFileBar');const empty=$('#compressEmpty');const config=$('#compressConfig');const btn=$('#compressBtn');
@@ -1859,6 +1887,7 @@ function refreshCompressUI(){
   $('#compressFileName').textContent=uploadedFile.name;
   $('#compressFileMeta').textContent=`${uploadedFile.pageCount} 页 · ${formatSize(uploadedFile.size)}`;
   updateCompressInfo();btn.disabled=false;
+  setTimeout(updateCompressPreview,300);
 }
 $('#compressRemove').addEventListener('click',()=>{uploadedFile=null;refreshCompressUI();updateDropZoneState()});
 $('#compressBtn').addEventListener('click',()=>payThen(async()=>{
@@ -1974,14 +2003,53 @@ function refreshImg2pdfUI(){
     item.querySelector('.mi-remove').addEventListener('click',e=>{e.stopPropagation();imageFiles.splice(parseInt(e.currentTarget.dataset.idx),1);refreshImg2pdfUI()});
     list.appendChild(item);
   });
+  // Render page layout preview
+  updateImg2pdfPreview();
 }
-let imgDragIdx=null;
+function updateImg2pdfPreview(){
 function imgDragStart(e){imgDragIdx=parseInt(this.dataset.index);this.classList.add('dragging');e.dataTransfer.effectAllowed='move';const g=document.createElement('div');g.style.cssText='width:1px;height:1px;position:absolute;top:-9999px';document.body.appendChild(g);e.dataTransfer.setDragImage(g,0,0);setTimeout(()=>document.body.removeChild(g),0)}
 function imgDragOver(e){e.preventDefault();$$('.merge-item.drop-before,.merge-item.drop-after').forEach(el=>el.classList.remove('drop-before','drop-after'));const r=this.getBoundingClientRect();this.classList.add(e.clientY<(r.top+r.height/2)?'drop-before':'drop-after')}
 function imgDragLeave(e){if(!this.contains(e.relatedTarget))this.classList.remove('drop-before','drop-after')}
 function imgDrop(e){e.preventDefault();this.classList.remove('drop-before','drop-after');if(imgDragIdx===null)return;const ti=parseInt(this.dataset.index);const r=this.getBoundingClientRect();let ins=e.clientY<(r.top+r.height/2)?ti:ti+1;if(imgDragIdx<ins)ins--;if(imgDragIdx!==ins){const[item]=imageFiles.splice(imgDragIdx,1);imageFiles.splice(ins,0,item)}refreshImg2pdfUI()}
 function imgDragEnd(){imgDragIdx=null;$$('.merge-item.dragging,.merge-item.drop-before,.merge-item.drop-after').forEach(el=>el.classList.remove('dragging','drop-before','drop-after'))}
 $('#img2pdfClear').addEventListener('click',()=>{imageFiles=[];refreshImg2pdfUI()});
+$('#img2pdfPageSize').addEventListener('change',()=>updateImg2pdfPreview());
+$('#img2pdfFit').addEventListener('change',()=>updateImg2pdfPreview());
+
+function updateImg2pdfPreview(){
+  const grid=$('#img2pdfGrid');const section=$('#img2pdfGridSection');const label=$('#img2pdfGridLabel');
+  if(!imageFiles.length){section.style.display='none';return}
+  section.style.display='';label.textContent=`页面布局预览（${$('#img2pdfPageSize').selectedOptions[0].text} · ${$('#img2pdfFit').selectedOptions[0].text}）`;
+  grid.innerHTML='';
+  const sizeKey=$('#img2pdfPageSize').value;const fit=$('#img2pdfFit').value;
+  imageFiles.slice(0,20).forEach((f,i)=>{
+    let pw,ph;
+    if(sizeKey==='original'){pw=f.width;ph=f.height}
+    else{[pw,ph]=PAGE_SIZES[sizeKey]}
+    const card=document.createElement('div');
+    card.className='page-card';
+    // Draw a mini mockup on canvas
+    const cvs=document.createElement('canvas');cvs.width=120;cvs.height=160;
+    const ctx=cvs.getContext('2d');
+    // White page background
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,120,160);ctx.strokeStyle='#E2E8F0';ctx.lineWidth=1;ctx.strokeRect(0,0,120,160);
+    // Calculate image placement
+    const scale=120/pw;let iw=f.width*scale,ih=f.height*scale*0.7; // Adjust for canvas ratio
+    const pageH=160;const actualScale=pageH/ph;
+    let x,y,w,h;
+    if(fit==='contain'){const s=Math.min(120/pw,pageH/ph);w=f.width*s;h=f.height*s;x=(120-w)/2;y=(pageH-h)/2}
+    else{w=120;h=pageH;x=0;y=0}
+    ctx.fillStyle='#E2E8F0';ctx.fillRect(x,y,w,h);
+    // Draw tiny image placeholder
+    const img=new Image();
+    img.onload=()=>{ctx.drawImage(img,x,y,w,h);};
+    img.src=f.dataUrl;
+    setTimeout(()=>{if(img.complete)ctx.drawImage(img,x,y,w,h)},200);
+    card.innerHTML=`<div class="pc-canvas-wrap">${cvs.outerHTML}</div><div class="pc-label">${escapeHtml(f.name.substring(0,12))}</div>`;
+    grid.appendChild(card);
+  });
+  if(imageFiles.length>20){grid.innerHTML+='<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:8px">… 还有 '+(imageFiles.length-20)+' 张</div>';}
+}
 const PAGE_SIZES={a4:[595.28,841.89],letter:[612,792]};
 $('#img2pdfBtn').addEventListener('click',()=>payThen(async()=>{
   if(!imageFiles.length)return;
