@@ -1350,8 +1350,12 @@ fileInput.addEventListener('change',()=>{
 
 function handleDrop(fileList){
   status('收到 '+fileList.length+' 个文件，当前标签: '+activeTab);
-  if(activeTab==='img2pdf'){
-    addImageFiles(fileList);
+  if(activeTab==='img2pdf'){addImageFiles(fileList);return;}
+  if(activeTab==='audio-convert'){addAudioFiles(fileList);return;}
+  if(activeTab==='audio-trim'||activeTab==='audio-speed'){
+    var af=Array.from(fileList).filter(function(f){return f.type.startsWith('audio/')||/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(f.name);});
+    if(!af.length){toast('未识别到音频文件',true);return;}
+    handleAudioSingle(af[0],activeTab==='audio-trim'?'trim':'speed');
     return;
   }
   const pdfs=Array.from(fileList).filter(f=>{
@@ -1364,24 +1368,11 @@ function handleDrop(fileList){
   if(activeTab==='merge'){
     status('路由到合并标签');
     addMergeFiles(pdfs);
-  }else if(activeTab==='img2pdf'){
-    status('路由到图转PDF');
-    addImageFiles(pdfs);
-  }else if(activeTab==='audio-convert'){
-    status('路由到音频转换');
-    addAudioFiles(pdfs);
-  }else if(activeTab==='audio-trim'){
-    status('路由到音频裁剪');
-    handleAudioSingle(pdfs[0],'trim');
-  }else if(activeTab==='audio-speed'){
-    status('路由到音频倍速');
-    handleAudioSingle(pdfs[0],'speed');
   }else{
     status('路由到单文件处理: '+pdfs[0].name);
     handleSingleFile(pdfs[0]);
   }
 }
-
 // ==================== SINGLE FILE HANDLING ====================
 async function handleSingleFile(file){
   status('开始处理: '+file.name+' ('+formatSize(file.size)+')');
