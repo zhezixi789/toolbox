@@ -15,6 +15,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js CDN failed')"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="console.warn('JSZip CDN failed')"></script>
+<script async src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js" onerror="console.warn('FFmpeg CDN failed')"></script>
 <style>
 :root {
   --primary: #6366F1;
@@ -341,6 +342,12 @@ body{
         <div class="side-coming">即将推出…</div>
       </div>
     </div>
+    <div class="side-group">
+      <button class="side-group-title" data-group="audio"><span>🎵 音频工具</span><span class="sg-arrow">▶</span></button>
+      <div class="side-group-items" id="group-audio" style="display:none">
+        <button class="side-tab" data-tab="audio-convert"><span class="tab-icon">🔄</span>格式转换</button>
+      </div>
+    </div>
     <button class="side-gear-btn" id="gearBtn" title="编辑工具显示/隐藏">⚙️</button>
   </div>
 
@@ -620,7 +627,45 @@ body{
     </div>
   </div>
 
-  <!-- === TAB: PAGE NUMBERS === -->
+  <!-- === TAB: AUDIO CONVERT === -->
+  <div class="tool-panel" id="panel-audio-convert" style="display:none">
+    <div class="empty-state visible" id="audioEmpty">拖入音频文件（MP3/WAV/FLAC/AAC/OGG/M4A），批量转换格式</div>
+    <div class="audio-config" id="audioConfig" style="display:none;flex-direction:column;gap:12px">
+      <div class="audio-file-list-section" id="audioListSection">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px">
+          <span style="font-size:13px;color:var(--text-secondary)" id="audioCount"></span>
+          <button class="ml-clear" id="audioClear">清空</button>
+        </div>
+        <div class="merge-list" id="audioList"></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap">转为：</span>
+        <select id="audioFormat" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
+          <option value="mp3">MP3（通用、体积小）</option>
+          <option value="wav">WAV（无损、体积大）</option>
+          <option value="aac">AAC（苹果优化）</option>
+          <option value="flac">FLAC（无损压缩）</option>
+          <option value="ogg">OGG（开源格式）</option>
+          <option value="m4a">M4A（手机录音）</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:12px;color:var(--text-muted)">码率：</span>
+          <select id="audioBitrate" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit">
+            <option value="128k">128kbps（标准）</option>
+            <option value="192k" selected>192kbps（高质量）</option>
+            <option value="256k">256kbps（极高）</option>
+            <option value="320k">320kbps（最佳）</option>
+          </select>
+        </div>
+      </div>
+      <div id="audioProgress" style="display:none;font-size:13px;color:var(--text-secondary);padding:8px 12px;background:#F8FAFC;border-radius:8px"></div>
+    </div>
+    <div class="actions" style="margin-top:8px">
+      <button class="btn btn-primary" id="audioConvertBtn" disabled>
+        <span class="btn-label">转换并下载</span><span class="btn-spinner"></span>
+      </button>
+    </div>
+  </div>
   <div class="tool-panel" id="panel-pagenum" style="display:none">
     <div class="file-info-bar" id="pagenumFileBar">
       <div class="fi-icon"><svg width="32" height="32" viewBox="0 0 32 32"><rect x="4" y="2" width="24" height="28" rx="2.5" fill="#FEF2F2" stroke="#FCA5A5" stroke-width="1.2"/><text x="16" y="21" text-anchor="middle" font-size="11" font-weight="700" fill="#DC2626">PDF</text></svg></div>
@@ -900,8 +945,8 @@ function switchTab(tab){
   dzSub.textContent=s+(extra?' · '+extra:'');
 
   // Update file input accept/multiple
-  if(tab==='merge'||tab==='img2pdf')fileInput.multiple=true;else fileInput.multiple=false;
-  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else fileInput.accept='.pdf,application/pdf';
+  if(tab==='merge'||tab==='img2pdf'||tab==='audio-convert')fileInput.multiple=true;else fileInput.multiple=false;
+  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
 
   // Refresh tab-specific UI
   if(tab==='merge')refreshMergeUI();
@@ -914,6 +959,7 @@ function switchTab(tab){
   else if(tab==='img2pdf')refreshImg2pdfUI();
   else if(tab==='watermark')refreshWatermarkUI();
   else if(tab==='pagenum')refreshPagenumUI();
+  else if(tab==='audio-convert')refreshAudioUI();
 
   // Drop zone has-file class
   updateDropZoneState();
@@ -1113,6 +1159,9 @@ function handleDrop(fileList){
   }else if(activeTab==='img2pdf'){
     status('路由到图转PDF');
     addImageFiles(pdfs);
+  }else if(activeTab==='audio-convert'){
+    status('路由到音频工具');
+    addAudioFiles(pdfs);
   }else{
     status('路由到单文件处理: '+pdfs[0].name);
     handleSingleFile(pdfs[0]);
@@ -2437,7 +2486,95 @@ $('#payCancelBtn').addEventListener('click',()=>{
   }
 });
 
-// ==================== INIT ====================
+// ==================== AUDIO CONVERT TAB ====================
+let audioFiles=[];
+let ffmpeg=null;let ffmpegLoading=false;
+
+async function initFFmpeg(){
+  if(ffmpeg)return ffmpeg;
+  if(ffmpegLoading)return null;
+  ffmpegLoading=true;
+  status('正在加载音频引擎（首次约需 5 秒）…');
+  try{
+    const{FFmpeg}=FFmpegWASM;
+    ffmpeg=new FFmpeg();
+    await ffmpeg.load({classWorkerURL:'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/814.ffmpeg.js'});
+    status('音频引擎就绪 ✅');
+    return ffmpeg;
+  }catch(e){status('音频引擎加载失败: '+e.message,true);ffmpegLoading=false;return null}
+  finally{ffmpegLoading=false}
+}
+
+async function addAudioFiles(newFiles){
+  const audio=Array.from(newFiles).filter(f=>f.type.startsWith('audio/')||/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(f.name));
+  if(!audio.length){toast('未识别到音频文件',true);return}
+  audioFiles.push(...audio);
+  refreshAudioUI();
+}
+
+function getAudioFormat(name){
+  const ext=name.split('.').pop().toLowerCase();
+  return ext==='m4a'?'M4A':ext.toUpperCase();
+}
+
+function refreshAudioUI(){
+  const section=$('#audioListSection');const empty=$('#audioEmpty');const config=$('#audioConfig');
+  const list=$('#audioList');const btn=$('#audioConvertBtn');const count=$('#audioCount');
+  const hasFiles=audioFiles.length>0;
+  section.style.display=hasFiles?'flex':'none';empty.classList.toggle('visible',!hasFiles);config.style.display=hasFiles?'flex':'none';
+  count.innerHTML=hasFiles?`共 <strong>${audioFiles.length}</strong> 个音频文件`:'';btn.disabled=!hasFiles;
+  list.innerHTML='';
+  audioFiles.forEach((f,i)=>{
+    const item=document.createElement('div');item.className='merge-item';
+    item.innerHTML=`<div style="flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:22px">🎵</div><div class="mi-info"><span class="mi-name">${escapeHtml(f.name)}</span><div class="mi-meta"><span>${getAudioFormat(f.name)}</span><span>${formatSize(f.size)}</span></div></div><button class="mi-remove" data-idx="${i}">✕</button>`;
+    item.querySelector('.mi-remove').addEventListener('click',e=>{e.stopPropagation();audioFiles.splice(parseInt(e.currentTarget.dataset.idx),1);refreshAudioUI()});
+    list.appendChild(item);
+  });
+}
+
+$('#audioClear').addEventListener('click',()=>{audioFiles=[];refreshAudioUI()});
+$('#audioConvertBtn').addEventListener('click',()=>payThen(async()=>{
+  if(!audioFiles.length)return;
+  const btn=$('#audioConvertBtn');btn.classList.add('loading');btn.disabled=true;
+  const fmt=$('#audioFormat').value;const br=$('#audioBitrate').value;const progress=$('#audioProgress');
+  progress.style.display='';progress.textContent='正在初始化…';
+  try{
+    const f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return}
+    let results=[];
+    for(let i=0;i<audioFiles.length;i++){
+      const file=audioFiles[i];
+      progress.textContent=`转换中 ${i+1}/${audioFiles.length}：${file.name}`;
+      const inName='input_'+i+'.'+file.name.split('.').pop();
+      const outName='output_'+i+'.'+fmt;
+      await f.writeFile(inName,new Uint8Array(await file.arrayBuffer()));
+      const args=['-i',inName];
+      if(fmt==='mp3')args.push('-codec:a','libmp3lame','-b:a',br);
+      else if(fmt==='wav')args.push('-codec:a','pcm_s16le');
+      else if(fmt==='aac')args.push('-codec:a','aac','-b:a',br);
+      else if(fmt==='flac')args.push('-codec:a','flac');
+      else if(fmt==='ogg')args.push('-codec:a','libvorbis','-b:a',br);
+      else if(fmt==='m4a')args.push('-codec:a','aac','-b:a',br,'-movflags','+faststart');
+      args.push(outName);
+      await f.exec(args);
+      const outBytes=await f.readFile(outName);
+      results.push({name:file.name.replace(/\.[^.]+$/,'.'+fmt),bytes:outBytes});
+      await f.deleteFile(inName);await f.deleteFile(outName);
+    }
+    progress.textContent='转换完成 ✅';
+    if(results.length===1){
+      downloadBlob(new Blob([results[0].bytes],{type:'audio/'+fmt}),results[0].name);
+    }else{
+      const zip=new JSZip();
+      results.forEach(r=>zip.file(r.name,r.bytes));
+      const zipBlob=await zip.generateAsync({type:'blob'});
+      downloadBlob(zipBlob,`音频转换_${timestamp()}.zip`);
+    }
+    toast(`✅ 已转换 ${results.length} 个音频文件`);
+  }catch(err){console.error(err);status('转换失败: '+(err.message||err),true);toast('转换失败: '+(err.message||'未知错误'),true)}
+  finally{progress.style.display='none';btn.classList.remove('loading');btn.disabled=false;}
+}));
+
+// ==================== FINAL INIT ====================
 switchTab('merge');
 })();
 </script>
