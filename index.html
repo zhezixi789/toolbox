@@ -2615,23 +2615,41 @@ document.querySelector('#audioConvertBtn').addEventListener('click',function(){p
         rawBytes=await decryptIfNeeded(file,rawBytes);
         if(!rawBytes||!rawBytes.length){toast('解密失败: '+file.name,true);continue;}
       }
-      // Encrypted formats: detect actual audio format from decrypted data
-      var inExt=encrypted?detectAudioFmt(rawBytes):file.name.split('.').pop();
-      var inName='input_'+i+'.'+inExt;
+      var inFmt=detectAudioFmt(rawBytes);
+      // If decrypted and already target format, skip FFmpeg transcode
+      if(encrypted && inFmt===fmt){
+        results.push({name:file.name.replace(/\.[^.]+$/,'.'+fmt),bytes:rawBytes});
+        continue;
+      }
+      var inName='input_'+i+'.'+inFmt;
       var outName='output_'+i+'.'+fmt;
-      await f.writeFile(inName,rawBytes);
-      var args=['-i',inName];
-      if(fmt==='mp3')args.push('-codec:a','libmp3lame','-b:a',br);
-      else if(fmt==='wav')args.push('-codec:a','pcm_s16le');
-      else if(fmt==='aac')args.push('-codec:a','aac','-b:a',br);
-      else if(fmt==='flac')args.push('-codec:a','flac');
-      else if(fmt==='ogg')args.push('-codec:a','libvorbis','-b:a',br);
-      else if(fmt==='m4a')args.push('-codec:a','aac','-b:a',br,'-movflags','+faststart');
-      args.push(outName);
-      await f.exec(args);
-      var outBytes=await f.readFile(outName);
-      results.push({name:file.name.replace(/\.[^.]+$/,'.'+fmt),bytes:outBytes});
-      await f.deleteFile(inName);await f.deleteFile(outName);
+      try{
+        var f=await initFFmpeg();if(!f)throw new Error('引擎未就绪');
+        await f.writeFile(inName,rawBytes);
+        var args=['-i',inName];
+        if(fmt==='mp3')args.push('-codec:a','libmp3lame','-b:a',br);
+        else if(fmt==='wav')args.push('-codec:a','pcm_s16le');
+        else if(fmt==='aac')args.push('-codec:a','aac','-b:a',br);
+        else if(fmt==='flac')args.push('-codec:a','flac');
+        else if(fmt==='ogg')args.push('-codec:a','libvorbis','-b:a',br);
+        else if(fmt==='m4a')args.push('-codec:a','aac','-b:a',br,'-movflags','+faststart');
+        args.push(outName);
+        await f.exec(args);
+        var outBytes=await f.readFile(outName);
+        results.push({name:file.name.replace(/\.[^.]+$/,'.'+fmt),bytes:outBytes});
+        await f.deleteFile(inName);await f.deleteFile(outName);
+      }catch(ffErr){
+        console.error('FFmpeg error:',ffErr);
+        // Reset FFmpeg on FS errors so subsequent files can try fresh
+        if(ffErr.message&&ffErr.message.indexOf('FS')>=0){_ffmpeg=null;}
+        // Fallback: for encrypted files, output the decrypted raw data
+        if(encrypted && rawBytes && rawBytes.length){
+          results.push({name:file.name.replace(/\.[^.]+$/,'.'+inFmt),bytes:rawBytes});
+          toast('⚠️ '+file.name+' 已解密但转码失败，输出原始格式');
+        }else{
+          toast('转换失败: '+file.name,true);
+        }
+      }
     }
     if(progress)progress.textContent='转换完成 ✅';
     if(results.length===1){downloadBlob(new Blob([results[0].bytes],{type:'audio/'+fmt}),results[0].name);}
