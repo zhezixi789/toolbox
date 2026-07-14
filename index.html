@@ -78,6 +78,8 @@ body{
 .sidebar .side-overflow .side-tab .st-hide:hover{background:rgba(16,185,129,.3);color:#fff}
 .sidebar .side-gear-btn{display:flex;align-items:center;justify-content:center;width:100%;padding:12px;margin-top:auto;border:none;background:transparent;font-size:18px;cursor:pointer;color:rgba(255,255,255,.3);transition:all .12s;border-top:1px solid rgba(255,255,255,.06)}
 .sidebar .side-gear-btn:hover{background:rgba(255,255,255,.04);color:#fff}
+.sidebar .side-ft-btn{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;padding:9px;border:none;background:transparent;font-size:12px;cursor:pointer;color:rgba(255,255,255,.35);transition:all .12s;border-top:1px solid rgba(255,255,255,.06);font-family:inherit}
+.sidebar .side-ft-btn:hover{background:rgba(255,255,255,.04);color:#fff}
 .sidebar .side-gear-btn.active{background:rgba(99,102,241,.25);color:#818CF8}
 
 /* Main content */
@@ -376,6 +378,7 @@ body{
         <button class="side-tab" data-tab="audio-editor"><span class="tab-icon">✂️</span>精细剪辑</button>
       </div>
     </div>
+    <button class="side-ft-btn" id="feedbackBtn" title="反馈建议">💬 反馈</button>
     <button class="side-gear-btn" id="gearBtn" title="编辑工具显示/隐藏">⚙️</button>
   </div>
 
@@ -835,6 +838,21 @@ body{
     <div class="pay-actions">
       <button class="pay-btn-demo" id="payDemoBtn">✅ 模拟支付</button>
       <button class="pay-btn-cancel" id="payCancelBtn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback Modal -->
+<div class="pay-overlay" id="feedbackOverlay">
+  <div class="pay-card">
+    <h3>💬 反馈建议</h3>
+    <p style="font-size:13px;color:var(--text-secondary);margin:8px 0">需要什么新功能？有什么建议？请留言告诉我。</p>
+    <textarea id="feedbackText" placeholder="请输入你的建议或需求…" style="width:100%;height:100px;padding:12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;resize:vertical;outline:none" maxlength="2000"></textarea>
+    <input type="text" id="feedbackContact" placeholder="联系方式（选填，方便回复你）" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;margin-top:8px;outline:none">
+    <div id="feedbackStatus" style="font-size:13px;color:var(--text-secondary);margin:8px 0;min-height:20px"></div>
+    <div class="pay-actions">
+      <button class="pay-btn-demo" id="feedbackSubmit">📩 提交反馈</button>
+      <button class="pay-btn-cancel" id="feedbackCancel">取消</button>
     </div>
   </div>
 </div>
@@ -2630,6 +2648,55 @@ $('#payCancelBtn').addEventListener('click',()=>{
   }else{
     overlay.classList.remove('show');
     pendingCallback = null;
+  }
+});
+
+
+// ==================== FEEDBACK ====================
+$('#feedbackBtn').addEventListener('click',function(){
+  $('#feedbackOverlay').classList.add('show');
+  $('#feedbackText').value='';
+  $('#feedbackContact').value='';
+  $('#feedbackStatus').textContent='';
+  $('#feedbackText').focus();
+});
+
+$('#feedbackCancel').addEventListener('click',function(){
+  $('#feedbackOverlay').classList.remove('show');
+});
+
+$('#feedbackSubmit').addEventListener('click',async function(){
+  var text=$('#feedbackText').value.trim();
+  if(!text){$('#feedbackStatus').textContent='⚠️ 请输入反馈内容';return;}
+  var btn=this;btn.disabled=true;btn.textContent='提交中…';
+  $('#feedbackStatus').textContent='正在提交…';
+
+  var payload={text:text,contact:$('#feedbackContact').value.trim(),page:activeTab,time:new Date().toISOString()};
+
+  if(PAY_CONFIG.backendURL){
+    try{
+      var resp=await fetch(PAY_CONFIG.backendURL+'/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      var data=await resp.json();
+      if(data.success){
+        $('#feedbackStatus').textContent='✅ 感谢反馈！已收到你的建议。';
+        setTimeout(function(){$('#feedbackOverlay').classList.remove('show');},1500);
+      }else{throw new Error(data.error||'提交失败');}
+    }catch(e){
+      $('#feedbackStatus').textContent='⚠️ 提交失败，请稍后重试';
+      btn.disabled=false;btn.textContent='📩 提交反馈';
+    }
+  }else{
+    // No backend: store in localStorage as fallback
+    try{
+      var fbList=JSON.parse(localStorage.getItem('toolbox_feedback')||'[]');
+      fbList.push(payload);
+      localStorage.setItem('toolbox_feedback',JSON.stringify(fbList));
+      $('#feedbackStatus').textContent='✅ 感谢反馈！（已本地保存，管理员稍后查看）';
+      setTimeout(function(){$('#feedbackOverlay').classList.remove('show');},1500);
+    }catch(e){
+      $('#feedbackStatus').textContent='⚠️ 存储失败: '+e.message;
+      btn.disabled=false;btn.textContent='📩 提交反馈';
+    }
   }
 });
 
