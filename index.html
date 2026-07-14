@@ -23,7 +23,6 @@
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js CDN failed')"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="console.warn('JSZip CDN failed')"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <script async src="./ffmpeg.js" onerror="console.warn('FFmpeg CDN failed')"></script>
 <style>
 :root {
@@ -698,7 +697,7 @@ body{
 
   <!-- === TAB: AUDIO CONVERT === -->
   <div class="tool-panel" id="panel-audio-convert" style="display:none">
-    <div class="empty-state visible" id="audioEmpty">拖入音频文件（MP3/WAV/FLAC/AAC/OGG/M4A/NCM/QMC/MGG/KGM等），批量转换格式</div>
+    <div class="empty-state visible" id="audioEmpty">拖入音频文件（MP3/WAV/FLAC/AAC/OGG/M4A），批量转换格式</div>
     <div class="audio-config" id="audioConfig" style="display:none;flex-direction:column;gap:12px">
       <div class="audio-file-list-section" id="audioListSection">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px">
@@ -2447,99 +2446,13 @@ async function initFFmpeg(){
   finally{_ffmpegLoading=false;}
 }
 
-// ==================== ENCRYPTED FORMAT DECRYPTION ====================
-// AES-128-ECB decrypt (pure JS — browser crypto.subtle lacks ECB support)
-
-function aesEcbDecrypt(keyBytes, data){
-  var keyWA=CryptoJS.enc.Hex.parse(Array.from(keyBytes).map(function(b){return b.toString(16).padStart(2,"0");}).join(""));
-  var dec=CryptoJS.AES.decrypt({ciphertext:CryptoJS.lib.WordArray.create(data)},keyWA,{mode:CryptoJS.mode.ECB,padding:CryptoJS.pad.Pkcs7});
-  return new Uint8Array(dec.toString(CryptoJS.enc.Latin1).split('').map(function(c){return c.charCodeAt(0);}));
-}
-
-function toU8(buf){return buf instanceof Uint8Array?buf:new Uint8Array(buf);}
-
-async function decryptNCM(bytes){
-  // Verify NCM magic header
-  if(bytes[0]!==0x43||bytes[1]!==0x54||bytes[2]!==0x45||bytes[3]!==0x4E)return null;
-  var view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-  var off=10;
-  var keyLen=view.getUint32(off,true);off+=4;
-  var cipherText=new Uint8Array(bytes.slice(off,off+keyLen)).map(function(b){return b^0x64;});
-  off+=keyLen;
-  var keyWA=CryptoJS.enc.Hex.parse("687a4852416d736f356b496e62617857");
-  var plainText=CryptoJS.AES.decrypt({ciphertext:CryptoJS.lib.WordArray.create(cipherText)},keyWA,{mode:CryptoJS.mode.ECB,padding:CryptoJS.pad.Pkcs7});
-  var keyData=new Uint8Array(plainText.toString(CryptoJS.enc.Latin1).split('').map(function(c){return c.charCodeAt(0);}));
-  keyData=keyData.slice(17);
-  // Build keyBox (same as unlock-music _getKeyBox)
-  var box=new Uint8Array(256);for(var i=0;i<256;i++)box[i]=i;
-  var j=0;for(var i=0;i<256;i++){j=(box[i]+j+keyData[i%keyData.length])&0xff;var t=box[i];box[i]=box[j];box[j]=t;}
-  var keyBox=box.map(function(_,i,arr){i=(i+1)&0xff;var si=arr[i];var sj=arr[(i+si)&0xff];return arr[(si+sj)&0xff];});
-  // Skip to audio: tagLen + tag data + 13-byte fixed padding
-  var tagLen=view.getUint32(off,true);off+=4+tagLen+13;
-  var audioData=new Uint8Array(bytes.slice(off));
-  for(var i=0;i<audioData.length;i++)audioData[i]^=keyBox[i&0xff];
-  return audioData.length===0?null:audioData;
-}
-function decryptQMC(buf, ext){
-  var bytes=toU8(buf);ext=(ext||'').toLowerCase();
-  var audioOff=0;
-  for(var i=0;i<bytes.length-4&&i<2048;i++){
-    if((bytes[i]===0xFF&&(bytes[i+1]&0xE0)===0xE0)||(bytes[i]===0x49&&bytes[i+1]===0x44&&bytes[i+2]===0x33)){audioOff=i;break;}
-    if(bytes[i]===0x66&&bytes[i+1]===0x4C&&bytes[i+2]===0x61&&bytes[i+3]===0x43){audioOff=i;break;}
-    if(bytes[i]===0x4F&&bytes[i+1]===0x67&&bytes[i+2]===0x67&&bytes[i+3]===0x53){audioOff=i;break;}
-  }
-  if(!audioOff)return null;
-  var key=new Uint8Array(256),v2=0;
-  for(var i=0;i<256;i++){v2=v2*131+17;key[i]=v2&0xff;}
-  var raw=new Uint8Array(bytes.length-audioOff);
-  for(var i=audioOff;i<bytes.length;i++)raw[i-audioOff]=bytes[i]^key[(i-audioOff)&0xff];
-  return raw;
-}
-
-// KGM/KGMA (Kugou) decryption
-function decryptKGM(buf){
-  var bytes=toU8(buf),key=new Uint8Array(256),v2=0;
-  for(var i=0;i<256;i++){v2=v2*131+17;key[i]=v2&0xff;}
-  var result=new Uint8Array(bytes.length);
-  for(var i=0;i<bytes.length;i++)result[i]=bytes[i]^key[i&0xff]^0x5A;
-  return result;
-}
-
-// Detect and decrypt encrypted audio formats, returns raw bytes or null on failure
-async function decryptIfNeeded(file, rawBytes){
-  var ext=file.name.split('.').pop().toLowerCase();
-  var u8=toU8(rawBytes);
-  if(ext==='ncm'){try{return await decryptNCM(u8);}catch(e){console.error('NCM:',e);return null;}}
-  if(/^(qmc|mgg|mflac|qmcflac|qmc0|qmc3)$/.test(ext)){try{return decryptQMC(u8,ext);}catch(e){console.error('QMC:',e);return null;}}
-  if(/^(kgm|kgma)$/.test(ext)){try{return decryptKGM(u8);}catch(e){console.error('KGM:',e);return null;}}
-  return u8;
-}
-
-function isEncryptedFormat(name){
-  return /\.(ncm|qmc|mgg|mflac|qmcflac|qmc0|qmc3|kgm|kgma|kwm)$/i.test(name);
-}
-
-// Detect audio format from raw bytes
-function detectAudioFmt(bytes){
-  if(bytes.length<4)return 'mp3';
-  // FLAC: "fLaC" at offset 0
-  if(bytes[0]===0x66&&bytes[1]===0x4C&&bytes[2]===0x61&&bytes[3]===0x43)return 'flac';
-  // OGG: "OggS"
-  if(bytes[0]===0x4F&&bytes[1]===0x67&&bytes[2]===0x67&&bytes[3]===0x53)return 'ogg';
-  // WAV: "RIFF"
-  if(bytes[0]===0x52&&bytes[1]===0x49&&bytes[2]===0x46&&bytes[3]===0x46)return 'wav';
-  // MP3: sync word 0xFFE0 or ID3 tag
-  if(bytes[0]===0xFF&&(bytes[1]&0xE0)===0xE0)return 'mp3';
-  if(bytes[0]===0x49&&bytes[1]===0x44&&bytes[2]===0x33)return 'mp3';
-  return 'mp3'; // default
-}
 async function addAudioFiles(newFiles){
-  var audio=Array.from(newFiles).filter(function(f){return f.type.startsWith('audio/')||/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff|ncm|qmc|mgg|mflac|qmc0|qmc3|qmcflac|kgm|kgma|kwm)$/i.test(f.name);});
+  var audio=Array.from(newFiles).filter(function(f){return f.type.startsWith('audio/')||/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(f.name);});
   if(!audio.length){toast('未识别到音频文件',true);return;}
   audioFiles.push.apply(audioFiles,audio);
   refreshAudioUI();
 }
-function getAudioFormat(name){var ext=name.split('.').pop().toLowerCase();var map={m4a:'M4A',ncm:'🔒NCM',qmc:'🔒QMC',mgg:'🔒MGG',mflac:'🔒MFLAC',qmc0:'🔒QMC',qmc3:'🔒QMC',qmcflac:'🔒QMC',kgm:'🔒KGM',kgma:'🔒KGM',kwm:'🔒KWM'};return map[ext]||ext.toUpperCase();}
+function getAudioFormat(name){var ext=name.split('.').pop().toLowerCase();return ext==='m4a'?'M4A':ext.toUpperCase();}
 function refreshAudioUI(){
   var section=document.querySelector('#audioListSection');
   var empty=document.querySelector('#audioEmpty');
@@ -2573,50 +2486,29 @@ document.querySelector('#audioConvertBtn').addEventListener('click',function(){p
     var results=[];
     for(var i=0;i<audioFiles.length;i++){
       var file=audioFiles[i];
-      if(progress)progress.textContent='转换中 '+(i+1)+'/'+audioFiles.length+'：'+file.name;
+      if(progress)progress.textContent="转换中 "+(i+1)+"/"+audioFiles.length+"："+file.name;
       var rawBytes=new Uint8Array(await file.arrayBuffer());
-      var encrypted=isEncryptedFormat(file.name);
-      if(encrypted){
-        if(progress)progress.textContent='解密中 '+(i+1)+'/'+audioFiles.length+'：'+file.name;
-        rawBytes=await decryptIfNeeded(file,rawBytes);
-        if(!rawBytes||!rawBytes.length){toast('解密失败: '+file.name,true);continue;}
-      }
-      var inFmt=detectAudioFmt(rawBytes);
-      // For encrypted files: skip FFmpeg entirely, output decrypted raw audio directly
-      if(encrypted){
-        results.push({name:file.name.replace(/\.[^.]+$/,'.'+inFmt),bytes:rawBytes});
-        if(inFmt===fmt)toast('✅ '+file.name+' 已解密为 '+inFmt.toUpperCase());
-        else toast('⚠️ '+file.name+' 解密为 '+inFmt.toUpperCase()+'（非目标格式 '+fmt.toUpperCase()+'）');
-        continue;
-      }
-      var inName='input_'+i+'.'+inFmt;
-      var outName='output_'+i+'.'+fmt;
+      var inExt=file.name.split(".").pop();
+      var inName="input_"+i+"."+inExt;
+      var outName="output_"+i+"."+fmt;
       try{
-        var f=await initFFmpeg();if(!f)throw new Error('引擎未就绪');
         await f.writeFile(inName,rawBytes);
-        var args=['-i',inName];
-        if(fmt==='mp3')args.push('-codec:a','libmp3lame','-b:a',br);
-        else if(fmt==='wav')args.push('-codec:a','pcm_s16le');
-        else if(fmt==='aac')args.push('-codec:a','aac','-b:a',br);
-        else if(fmt==='flac')args.push('-codec:a','flac');
-        else if(fmt==='ogg')args.push('-codec:a','libvorbis','-b:a',br);
-        else if(fmt==='m4a')args.push('-codec:a','aac','-b:a',br,'-movflags','+faststart');
+        var args=["-i",inName];
+        if(fmt==="mp3")args.push("-codec:a","libmp3lame","-b:a",br);
+        else if(fmt==="wav")args.push("-codec:a","pcm_s16le");
+        else if(fmt==="aac")args.push("-codec:a","aac","-b:a",br);
+        else if(fmt==="flac")args.push("-codec:a","flac");
+        else if(fmt==="ogg")args.push("-codec:a","libvorbis","-b:a",br);
+        else if(fmt==="m4a")args.push("-codec:a","aac","-b:a",br,"-movflags","+faststart");
         args.push(outName);
         await f.exec(args);
         var outBytes=await f.readFile(outName);
         results.push({name:file.name.replace(/\.[^.]+$/,'.'+fmt),bytes:outBytes});
         await f.deleteFile(inName);await f.deleteFile(outName);
       }catch(ffErr){
-        console.error('FFmpeg error:',ffErr);
-        // Reset FFmpeg on FS errors so subsequent files can try fresh
-        if(ffErr.message&&ffErr.message.indexOf('FS')>=0){_ffmpeg=null;}
-        // Fallback: for encrypted files, output the decrypted raw data
-        if(encrypted && rawBytes && rawBytes.length){
-          results.push({name:file.name.replace(/\.[^.]+$/,'.'+inFmt),bytes:rawBytes});
-          toast('⚠️ '+file.name+' 已解密但转码失败，输出原始格式');
-        }else{
-          toast('转换失败: '+file.name,true);
-        }
+        console.error("FFmpeg error:",ffErr);
+        if(ffErr.message&&ffErr.message.indexOf("FS")>=0){_ffmpeg=null;}
+        toast("转换失败: "+file.name,true);
       }
     }
     if(progress)progress.textContent='转换完成 ✅';
