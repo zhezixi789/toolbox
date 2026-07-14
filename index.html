@@ -23,6 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js CDN failed')"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="console.warn('JSZip CDN failed')"></script>
+<script async src="https://cdn.jsdelivr.net/npm/aes-js@3.1.2/index.min.js" onerror="console.warn('aes-js CDN failed')"></script>
 <script async src="./ffmpeg.js" onerror="console.warn('FFmpeg CDN failed')"></script>
 <style>
 :root {
@@ -2459,6 +2460,8 @@ function _aesGm(a,b){var r=0;for(var i=0;i<8;i++){if(b&1)r^=a;var h=a&0x80;a=(a<
 function _aesInvMixColumns(s){for(var i=0;i<4;i++){var c=i*4,a=s[c],b=s[c+1],d=s[c+2],e=s[c+3];s[c]=_aesGm(0x0e,a)^_aesGm(0x0b,b)^_aesGm(0x0d,d)^_aesGm(0x09,e);s[c+1]=_aesGm(0x09,a)^_aesGm(0x0e,b)^_aesGm(0x0b,d)^_aesGm(0x0d,e);s[c+2]=_aesGm(0x0d,a)^_aesGm(0x09,b)^_aesGm(0x0e,d)^_aesGm(0x0b,e);s[c+3]=_aesGm(0x0b,a)^_aesGm(0x0d,b)^_aesGm(0x09,d)^_aesGm(0x0e,e);}}
 
 function aes128EcbDecrypt(keyBytes, data){
+  // Prefer aes-js CDN (battle-tested AES-ECB)
+  if(typeof aesjs!=='undefined'){return new aesjs.ModeOfOperation.ecb(keyBytes).decrypt(data);}
   var NK=4,NR=10,w=new Array(4*(NR+1));
   for(var i=0;i<NK;i++)w[i]=((keyBytes[4*i]<<24)|(keyBytes[4*i+1]<<16)|(keyBytes[4*i+2]<<8)|keyBytes[4*i+3])>>>0;
   for(var i=NK;i<4*(NR+1);i++){
