@@ -2627,9 +2627,11 @@ document.querySelector('#audioConvertBtn').addEventListener('click',function(){p
         if(!rawBytes||!rawBytes.length){toast('解密失败: '+file.name,true);continue;}
       }
       var inFmt=detectAudioFmt(rawBytes);
-      // If decrypted and already target format, skip FFmpeg transcode
-      if(encrypted && inFmt===fmt){
-        results.push({name:file.name.replace(/\.[^.]+$/,'.'+fmt),bytes:rawBytes});
+      // For encrypted files: skip FFmpeg entirely, output decrypted raw audio directly
+      if(encrypted){
+        results.push({name:file.name.replace(/\.[^.]+$/,'.'+inFmt),bytes:rawBytes});
+        if(inFmt===fmt)toast('✅ '+file.name+' 已解密为 '+inFmt.toUpperCase());
+        else toast('⚠️ '+file.name+' 解密为 '+inFmt.toUpperCase()+'（非目标格式 '+fmt.toUpperCase()+'）');
         continue;
       }
       var inName='input_'+i+'.'+inFmt;
