@@ -2507,7 +2507,16 @@ async function decryptNCM(bytes){
   // AES-128-ECB decrypt the RC4 key
   var ncmAesKey=new Uint8Array([0x68,0x7A,0x48,0x52,0x41,0x6D,0x73,0x6F,0x35,0x6B,0x49,0x6E,0x62,0x61,0x78,0x57]);
   var decKey=aes128EcbDecrypt(ncmAesKey,encKey);
-  // RC4 KSA
+  // Generate first 16 keystream bytes and scan for correct audio offset
+  var S=new Uint8Array(256);for(var i=0;i<256;i++)S[i]=i;
+  var j=0;for(var i=0;i<256;i++){j=(j+S[i]+decKey[i%decKey.length])&0xff;var t=S[i];S[i]=S[j];S[j]=t;}
+  var ks16=new Uint8Array(16);var x=0,y=0;for(var i=0;i<16;i++){x=(x+1)&0xff;y=(y+S[x])&0xff;t=S[x];S[x]=S[y];S[y]=t;ks16[i]=S[(S[x]+S[y])&0xff];}
+  for(var tryOff=Math.max(0,audioStart-200);tryOff<=audioStart+200;tryOff++){
+    if(tryOff+4>view.byteLength)continue;
+    var t0=bytes[tryOff]^ks16[0],t1=bytes[tryOff+1]^ks16[1],t2=bytes[tryOff+2]^ks16[2],t3=bytes[tryOff+3]^ks16[3];
+    if((t0===0xFF&&(t1&0xE0)===0xE0)||(t0===0x49&&t1===0x44&&t2===0x33)||(t0===0x66&&t1===0x4C&&t2===0x61&&t3===0x43)){audioStart=tryOff;break;}
+  }
+  // RC4 KSA (full)
   var S=new Uint8Array(256);
   for(var i=0;i<256;i++)S[i]=i;
   var j=0;
