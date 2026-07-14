@@ -2514,6 +2514,8 @@ async function decryptNCM(bytes){
   // Show debug info in status bar (visible on page)
   var encHex=Array.from(encKey.slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
   var ver=bytes[8]+'/'+bytes[9]; // NCM version bytes after "CTENFDAM"
+  // v1 NCM: XOR key data with 0x64 before AES decrypt
+  if(bytes[8]===1){for(var i=0;i<encKey.length;i++)encKey[i]^=0x64;}
   var ncmAesKey=new Uint8Array([0x68,0x7A,0x48,0x52,0x41,0x6D,0x73,0x6F,0x35,0x6B,0x49,0x6E,0x62,0x61,0x78,0x57]);
   var decKey=aes128EcbDecrypt(ncmAesKey,encKey);
   // Try nearby offsets: RC4 needs EXACT alignment — being off by 1 byte corrupts everything
