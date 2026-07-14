@@ -2453,16 +2453,14 @@ async function initFFmpeg(){
 function aesEcbDecrypt(keyBytes, data){
   var keyWA=CryptoJS.enc.Hex.parse(Array.from(keyBytes).map(function(b){return b.toString(16).padStart(2,"0");}).join(""));
   var dec=CryptoJS.AES.decrypt({ciphertext:CryptoJS.lib.WordArray.create(data)},keyWA,{mode:CryptoJS.mode.ECB,padding:CryptoJS.pad.Pkcs7});
-  var result=new Uint8Array(dec.sigBytes);
-  for(var i=0;i<dec.sigBytes;i++)result[i]=(dec.words[i>>>2]>>>(24-(i%4)*8))&0xff;
-  return result;
+  return new Uint8Array(dec.toString(CryptoJS.enc.Latin1).split('').map(function(c){return c.charCodeAt(0);}));
 }
 
-// Helper: convert ArrayBuffer to Uint8Array safely
 function toU8(buf){return buf instanceof Uint8Array?buf:new Uint8Array(buf);}
 
-// NCM (NetEase Cloud Music) decryption
 async function decryptNCM(bytes){
+  // Verify NCM magic header
+  if(bytes[0]!==0x43||bytes[1]!==0x54||bytes[2]!==0x45||bytes[3]!==0x4E)return null;
   var view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
   var off=10;
   var keyLen=view.getUint32(off,true);off+=4;
@@ -2470,20 +2468,17 @@ async function decryptNCM(bytes){
   off+=keyLen;
   var keyWA=CryptoJS.enc.Hex.parse("687a4852416d736f356b496e62617857");
   var plainText=CryptoJS.AES.decrypt({ciphertext:CryptoJS.lib.WordArray.create(cipherText)},keyWA,{mode:CryptoJS.mode.ECB,padding:CryptoJS.pad.Pkcs7});
-  var keyData=new Uint8Array(plainText.sigBytes);
-  for(var i=0;i<plainText.sigBytes;i++)keyData[i]=(plainText.words[i>>>2]>>>(24-(i%4)*8))&0xff;
+  var keyData=new Uint8Array(plainText.toString(CryptoJS.enc.Latin1).split('').map(function(c){return c.charCodeAt(0);}));
   keyData=keyData.slice(17);
-  // Skip metadata (same as unlock-music _getMetaData)
-  var metaLen=view.getUint32(off,true);off+=4+metaLen;
-  // Build keyBox
+  // Build keyBox (same as unlock-music _getKeyBox)
   var box=new Uint8Array(256);for(var i=0;i<256;i++)box[i]=i;
   var j=0;for(var i=0;i<256;i++){j=(box[i]+j+keyData[i%keyData.length])&0xff;var t=box[i];box[i]=box[j];box[j]=t;}
   var keyBox=box.map(function(_,i,arr){i=(i+1)&0xff;var si=arr[i];var sj=arr[(i+si)&0xff];return arr[(si+sj)&0xff];});
-  // Skip to audio (same as unlock-music _getAudio)
-  off+=view.getUint32(off+5,true)+13;
+  // Skip to audio: tagLen + tag data + 13-byte fixed padding
+  var tagLen=view.getUint32(off,true);off+=4+tagLen+13;
   var audioData=new Uint8Array(bytes.slice(off));
   for(var i=0;i<audioData.length;i++)audioData[i]^=keyBox[i&0xff];
-  return audioData.length>1024?audioData:null;
+  return audioData.length===0?null:audioData;
 }
 function decryptQMC(buf, ext){
   var bytes=toU8(buf);ext=(ext||'').toLowerCase();
