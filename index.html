@@ -2461,7 +2461,12 @@ function _aesGm(a,b){var r=0;for(var i=0;i<8;i++){if(b&1)r^=a;var h=a&0x80;a=(a<
 function _aesInvMixColumns(s){for(var i=0;i<4;i++){var c=i*4,a=s[c],b=s[c+1],d=s[c+2],e=s[c+3];s[c]=_aesGm(0x0e,a)^_aesGm(0x0b,b)^_aesGm(0x0d,d)^_aesGm(0x09,e);s[c+1]=_aesGm(0x09,a)^_aesGm(0x0e,b)^_aesGm(0x0b,d)^_aesGm(0x0d,e);s[c+2]=_aesGm(0x0d,a)^_aesGm(0x09,b)^_aesGm(0x0e,d)^_aesGm(0x0b,e);s[c+3]=_aesGm(0x0b,a)^_aesGm(0x0d,b)^_aesGm(0x09,d)^_aesGm(0x0e,e);}}
 
 function aes128EcbDecrypt(keyBytes, data){
-  if(typeof aesjs!=='undefined'){_aesUsed='aes-js';return new aesjs.ModeOfOperation.ecb(keyBytes).decrypt(data);}
+  if(typeof aesjs!=='undefined'){
+    _aesUsed='aes-js';
+    // aes-js expects regular Arrays, not TypedArrays
+    var k=Array.from(keyBytes),d=Array.from(data);
+    try{return new Uint8Array(new aesjs.ModeOfOperation.ecb(k).decrypt(d));}catch(e){_aesUsed='aes-js-ERR';}
+  }
   _aesUsed='pureJS';
   var NK=4,NR=10,w=new Array(4*(NR+1));
   for(var i=0;i<NK;i++)w[i]=((keyBytes[4*i]<<24)|(keyBytes[4*i+1]<<16)|(keyBytes[4*i+2]<<8)|keyBytes[4*i+3])>>>0;
@@ -2512,17 +2517,18 @@ async function decryptNCM(bytes){
   var decKey=aes128EcbDecrypt(ncmAesKey,encKey);
   // Try nearby offsets: RC4 needs EXACT alignment — being off by 1 byte corrupts everything
   var bestOff=audioStart;
+  var foundOff=false,scanFrom=audioStart;
   for(var tryOff=Math.max(0,audioStart-16);tryOff<=audioStart+16;tryOff++){
     if(tryOff+16>view.byteLength)continue;
     var testS=new Uint8Array(256);for(var i=0;i<256;i++)testS[i]=i;
     var tj=0;for(var i=0;i<256;i++){tj=(tj+testS[i]+decKey[i%decKey.length])&0xff;var tt=testS[i];testS[i]=testS[tj];testS[tj]=tt;}
     var tx=0,ty=0,testOut=new Uint8Array(16);
     for(var i=0;i<16;i++){tx=(tx+1)&0xff;ty=(ty+testS[tx])&0xff;tt=testS[tx];testS[tx]=testS[ty];testS[ty]=tt;testOut[i]=bytes[tryOff+i]^testS[(testS[tx]+testS[ty])&0xff];}
-    if((testOut[0]===0xFF&&(testOut[1]&0xE0)===0xE0)||(testOut[0]===0x49&&testOut[1]===0x44&&testOut[2]===0x33)||(testOut[0]===0x66&&testOut[1]===0x4C&&testOut[2]===0x61&&testOut[3]===0x43)){bestOff=tryOff;break;}
+    if((testOut[0]===0xFF&&(testOut[1]&0xE0)===0xE0)||(testOut[0]===0x49&&testOut[1]===0x44&&testOut[2]===0x33)||(testOut[0]===0x66&&testOut[1]===0x4C&&testOut[2]===0x61&&testOut[3]===0x43)){bestOff=tryOff;foundOff=true;break;}
   }
   audioStart=bestOff;
   var decHex=Array.from(decKey.slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  status('AES:'+(_aesUsed||'?')+' keyLen='+keyLen+' enc='+encHex+' dec='+decHex+' off='+audioStart+(audioStart!==off?' (was '+off+')':''));
+  status('AES:'+(_aesUsed||'?')+' keyLen='+keyLen+' enc='+encHex+' dec='+decHex+' off='+audioStart+(foundOff?' ok':(audioStart!==scanFrom?'':' noMatch')));
   // RC4 KSA + PRGA with correct offset
   var S=new Uint8Array(256);
   for(var i=0;i<256;i++)S[i]=i;
