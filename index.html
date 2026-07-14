@@ -2482,23 +2482,34 @@ function aes128EcbDecrypt(keyBytes, data){
 function toU8(buf){return buf instanceof Uint8Array?buf:new Uint8Array(buf);}
 
 // NCM (NetEase Cloud Music) decryption
-async function decryptNCM(buf){
-  var bytes=toU8(buf),view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),off=10;
+async function decryptNCM(bytes){
+  var view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),off=10;
+  if(view.byteLength<20)return null;
   var keyLen=view.getUint32(off,true);off+=4;
+  if(off+keyLen>view.byteLength)return null;
   var encKey=bytes.slice(off,off+keyLen);off+=keyLen;
   var metaLen=view.getUint32(off,true);off+=4;
-  off+=metaLen+9;
-  var imgSize=view.getUint32(off-4,true);
-  off+=imgSize;
+  off+=metaLen;
+  // Skip CRC(4) + album image size(4) + album image
+  if(off+9>view.byteLength)return null;
+  off+=5;
+  var imgSize=view.getUint32(off,true);off+=4+imgSize;
+  if(off>=view.byteLength)return null;
+  // AES decrypt the key
   var ncmAesKey=new Uint8Array([0x68,0x7A,0x48,0x52,0x41,0x6D,0x73,0x6F,0x35,0x6B,0x49,0x6E,0x62,0x61,0x78,0x57]);
   var decKey=aes128EcbDecrypt(ncmAesKey,encKey);
+  // RC4-like key schedule
   var keyBox=new Uint8Array(256);
   for(var i=0;i<256;i++)keyBox[i]=i;
   var j=0;
   for(var i=0;i<256;i++){j=(j+keyBox[i]+decKey[i%decKey.length])&0xff;var t=keyBox[i];keyBox[i]=keyBox[j];keyBox[j]=t;}
-  var audioData=bytes.slice(off);
-  var x=0,y=0;
-  for(var i=0;i<audioData.length;i++){x=(x+1)&0xff;y=(y+keyBox[x])&0xff;var t=keyBox[x];keyBox[x]=keyBox[y];keyBox[y]=t;audioData[i]^=keyBox[(keyBox[x]+keyBox[y])&0xff];}
+  // XOR decrypt audio data
+  var audioData=new Uint8Array(view.byteLength-off);
+  var x=0,y=0,src=bytes;
+  for(var i=off;i<view.byteLength;i++){
+    x=(x+1)&0xff;y=(y+keyBox[x])&0xff;var t=keyBox[x];keyBox[x]=keyBox[y];keyBox[y]=t;
+    audioData[i-off]=src[i]^keyBox[(keyBox[x]+keyBox[y])&0xff];
+  }
   return audioData;
 }
 
@@ -2540,6 +2551,21 @@ async function decryptIfNeeded(file, rawBytes){
 
 function isEncryptedFormat(name){
   return /\.(ncm|qmc|mgg|mflac|qmcflac|qmc0|qmc3|kgm|kgma|kwm)$/i.test(name);
+}
+
+// Detect audio format from raw bytes
+function detectAudioFmt(bytes){
+  if(bytes.length<4)return 'mp3';
+  // FLAC: "fLaC" at offset 0
+  if(bytes[0]===0x66&&bytes[1]===0x4C&&bytes[2]===0x61&&bytes[3]===0x43)return 'flac';
+  // OGG: "OggS"
+  if(bytes[0]===0x4F&&bytes[1]===0x67&&bytes[2]===0x67&&bytes[3]===0x53)return 'ogg';
+  // WAV: "RIFF"
+  if(bytes[0]===0x52&&bytes[1]===0x49&&bytes[2]===0x46&&bytes[3]===0x46)return 'wav';
+  // MP3: sync word 0xFFE0 or ID3 tag
+  if(bytes[0]===0xFF&&(bytes[1]&0xE0)===0xE0)return 'mp3';
+  if(bytes[0]===0x49&&bytes[1]===0x44&&bytes[2]===0x33)return 'mp3';
+  return 'mp3'; // default
 }
 async function addAudioFiles(newFiles){
   var audio=Array.from(newFiles).filter(function(f){return f.type.startsWith('audio/')||/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff|ncm|qmc|mgg|mflac|qmc0|qmc3|qmcflac|kgm|kgma|kwm)$/i.test(f.name);});
@@ -2589,8 +2615,8 @@ document.querySelector('#audioConvertBtn').addEventListener('click',function(){p
         rawBytes=await decryptIfNeeded(file,rawBytes);
         if(!rawBytes||!rawBytes.length){toast('解密失败: '+file.name,true);continue;}
       }
-      // Encrypted formats use .mp3 as FFmpeg input (most common underlying codec)
-      var inExt=encrypted?'mp3':file.name.split('.').pop();
+      // Encrypted formats: detect actual audio format from decrypted data
+      var inExt=encrypted?detectAudioFmt(rawBytes):file.name.split('.').pop();
       var inName='input_'+i+'.'+inExt;
       var outName='output_'+i+'.'+fmt;
       await f.writeFile(inName,rawBytes);
