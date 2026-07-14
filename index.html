@@ -2473,9 +2473,13 @@ async function decryptNCM(bytes){
   var keyData=new Uint8Array(plainText.sigBytes);
   for(var i=0;i<plainText.sigBytes;i++)keyData[i]=(plainText.words[i>>>2]>>>(24-(i%4)*8))&0xff;
   keyData=keyData.slice(17);
+  // Skip metadata (same as unlock-music _getMetaData)
+  var metaLen=view.getUint32(off,true);off+=4+metaLen;
+  // Build keyBox
   var box=new Uint8Array(256);for(var i=0;i<256;i++)box[i]=i;
   var j=0;for(var i=0;i<256;i++){j=(box[i]+j+keyData[i%keyData.length])&0xff;var t=box[i];box[i]=box[j];box[j]=t;}
   var keyBox=box.map(function(_,i,arr){i=(i+1)&0xff;var si=arr[i];var sj=arr[(i+si)&0xff];return arr[(si+sj)&0xff];});
+  // Skip to audio (same as unlock-music _getAudio)
   off+=view.getUint32(off+5,true)+13;
   var audioData=new Uint8Array(bytes.slice(off));
   for(var i=0;i<audioData.length;i++)audioData[i]^=keyBox[i&0xff];
