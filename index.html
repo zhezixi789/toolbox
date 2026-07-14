@@ -372,7 +372,6 @@ body{
       <button class="side-group-title" data-group="audio" onclick="var el=document.getElementById('group-audio');if(el.style.display=='none'){el.style.display='';this.classList.add('open')}else{el.style.display='none';this.classList.remove('open')}"><span>🎵 音频工具</span><span class="sg-arrow">▶</span></button>
       <div class="side-group-items" id="group-audio" style="display:none">
         <button class="side-tab" data-tab="audio-convert"><span class="tab-icon">🔄</span>格式转换</button>
-        <button class="side-tab" data-tab="audio-trim"><span class="tab-icon">✂️</span>音频裁剪</button>
         <button class="side-tab" data-tab="audio-speed"><span class="tab-icon">⏩</span>音频倍速</button>
         <button class="side-tab" data-tab="audio-editor"><span class="tab-icon">✂️</span>精细剪辑</button>
       </div>
@@ -679,31 +678,6 @@ body{
     </div>
   </div>
 
-  <!-- === TAB: AUDIO TRIM === -->
-  <div class="tool-panel" id="panel-audio-trim" style="display:none">
-    <div class="empty-state visible" id="audioTrimEmpty">拖入一个音频文件，裁剪片段</div>
-    <div class="audio-config" id="audioTrimConfig" style="display:none;flex-direction:column;gap:12px">
-      <div class="file-info-bar visible" style="margin:0">
-        <div style="font-size:22px;flex-shrink:0">🎵</div>
-        <div class="fi-details"><div class="fi-name" id="audioTrimName"></div><div class="fi-meta" id="audioTrimMeta"></div></div>
-        <button class="fi-remove" id="audioTrimRemove">✕</button>
-      </div>
-      <audio id="audioTrimPlayer" controls style="width:100%;border-radius:8px"></audio>
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-        <span style="font-size:13px;color:var(--text-secondary)">开始：</span>
-        <input type="text" id="audioTrimStart" value="00:00" placeholder="mm:ss" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:monospace">
-        <span style="font-size:13px;color:var(--text-secondary)">结束：</span>
-        <input type="text" id="audioTrimEnd" value="00:30" placeholder="mm:ss" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:monospace">
-        <span style="font-size:11px;color:var(--text-muted)">格式 mm:ss</span>
-      </div>
-    </div>
-    <div class="actions" style="margin-top:8px">
-      <button class="btn btn-primary" id="audioTrimBtn" disabled>
-        <span class="btn-label">裁剪并下载</span><span class="btn-spinner"></span>
-      </button>
-    </div>
-  </div>
-
   <!-- === TAB: AUDIO SPEED === -->
   <div class="tool-panel" id="panel-audio-speed" style="display:none">
     <div class="empty-state visible" id="audioSpeedEmpty">拖入一个音频文件，调整播放速度</div>
@@ -724,6 +698,8 @@ body{
           <option value="2.0">2.0x（倍速）</option>
         </select>
         <span style="font-size:11px;color:var(--text-muted)">保持音调不变</span>
+        <button class="pg-btn" id="audioSpeedPreview">🔊 预览倍速</button>
+        <span id="audioSpeedPreviewStatus" style="font-size:11px;color:var(--primary);display:none">正在播放预览…</span>
       </div>
     </div>
     <div class="actions" style="margin-top:8px">
@@ -884,155 +860,6 @@ function status(msg, isErr){
   if(s){ s.textContent = msg; s.style.color = isErr ? '#EF4444' : '#10B981'; }
 }
 
-
-// ==================== AUDIO EDITOR TAB ====================
-var audioEditorFile=null,_editorCtx=null,_editorWaveData=null,_editorStart=null,_editorEnd=null,_editorSegments=[],_editorAudioBuffer=null,_editorPlaying=false,_editorSource=null;
-
-function initAudioEditorCtx(){
-  if(!_editorCtx)try{_editorCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}
-  return _editorCtx;
-}
-
-async function handleAudioEditorFile(file){
-  if(!file.type.startsWith('audio/')&&!/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(file.name)){toast('请上传音频文件',true);return;}
-  var ctx=initAudioEditorCtx();if(!ctx){toast('浏览器不支持音频处理',true);return;}
-  audioEditorFile={file:file};_editorSegments=[];_editorStart=null;_editorEnd=null;
-  try{
-    var buf=await file.arrayBuffer();
-    _editorAudioBuffer=await ctx.decodeAudioData(buf);
-    _editorWaveData=_editorAudioBuffer.getChannelData(0);
-    refreshAudioEditorUI();
-  }catch(e){toast('音频解码失败: '+e.message,true);}
-}
-
-function drawWaveform(){
-  var cvs=document.querySelector('#audioEditorWave');if(!cvs||!_editorWaveData)return;
-  var w=cvs.width=cvs.offsetWidth,h=cvs.height=160,ctx=cvs.getContext('2d'),d=_editorWaveData;
-  ctx.fillStyle='#1E293B';ctx.fillRect(0,0,w,h);
-  var step=Math.max(1,Math.floor(d.length/w));
-  ctx.beginPath();ctx.moveTo(0,h/2);
-  for(var i=0;i<w;i++){var si=i*step,sum=0;for(var j=0;j<step&&si+j<d.length;j++)sum+=Math.abs(d[si+j]);var avg=sum/step*2;ctx.lineTo(i,h/2-avg*h/2);}
-  ctx.lineWidth=1;ctx.strokeStyle='#6366F1';ctx.stroke();
-  ctx.beginPath();ctx.moveTo(0,h/2);
-  for(var i=0;i<w;i++){var si=i*step,sum=0;for(var j=0;j<step&&si+j<d.length;j++)sum+=Math.abs(d[si+j]);var avg=sum/step*2;ctx.lineTo(i,h/2+avg*h/2);}
-  ctx.fillStyle='rgba(99,102,241,.15)';ctx.fill();
-  // Time markers
-  ctx.fillStyle='rgba(255,255,255,.3)';ctx.font='10px monospace';
-  var dur=_editorAudioBuffer.duration;
-  for(var t=0;t<dur;t+=Math.max(1,Math.floor(dur/10))){var x=t/dur*w;ctx.fillText(formatTime(t),x+2,h-4);}
-  // Draw segments
-  _editorSegments.forEach(function(seg,i){
-    var sx=seg.start/dur*w,ex=seg.end/dur*w;
-    ctx.fillStyle='rgba(239,68,68,.3)';ctx.fillRect(sx,0,ex-sx,h);
-    ctx.fillStyle='#fff';ctx.font='11px sans-serif';ctx.fillText(i+1,sx+4,14);
-  });
-  // Draw markers
-  if(_editorStart!==null){
-    var mx=_editorStart/dur*w;ctx.strokeStyle='#10B981';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,h);ctx.stroke();
-    ctx.fillStyle='#10B981';ctx.beginPath();ctx.arc(mx,10,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText('S',mx,14);
-  }
-  if(_editorEnd!==null){
-    var mx=_editorEnd/dur*w;ctx.strokeStyle='#EF4444';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,h);ctx.stroke();
-    ctx.fillStyle='#EF4444';ctx.beginPath();ctx.arc(mx,10,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText('E',mx,14);
-  }
-}
-
-function timeFromWaveX(x){
-  var cvs=document.querySelector('#audioEditorWave');if(!cvs||!_editorAudioBuffer)return 0;
-  return(x/cvs.offsetWidth)*_editorAudioBuffer.duration;
-}
-
-// Waveform click handlers
-document.querySelector('#audioEditorWave').addEventListener('click',function(e){
-  if(!_editorAudioBuffer)return;
-  var rect=this.getBoundingClientRect(),x=e.clientX-rect.left,t=timeFromWaveX(x);
-  if(e.shiftKey){_editorEnd=Math.max(0,Math.min(t,_editorAudioBuffer.duration));}
-  else{_editorStart=Math.max(0,Math.min(t,_editorAudioBuffer.duration));if(_editorEnd!==null&&_editorStart>_editorEnd)_editorEnd=null;}
-  drawWaveform();
-});
-// Drag markers
-var _dragging=null;
-document.querySelector('#audioEditorWave').addEventListener('mousedown',function(e){
-  if(!_editorAudioBuffer||_editorStart===null)return;
-  var rect=this.getBoundingClientRect(),x=e.clientX-rect.left,t=timeFromWaveX(x);
-  if(Math.abs(t-_editorStart)<_editorAudioBuffer.duration*0.02)_dragging='start';
-  else if(_editorEnd!==null&&Math.abs(t-_editorEnd)<_editorAudioBuffer.duration*0.02)_dragging='end';
-});
-document.querySelector('#audioEditorWave').addEventListener('mousemove',function(e){
-  if(!_dragging||!_editorAudioBuffer)return;
-  var rect=this.getBoundingClientRect(),x=e.clientX-rect.left,t=timeFromWaveX(x);
-  if(_dragging==='start'){_editorStart=Math.max(0,Math.min(t,_editorEnd||_editorAudioBuffer.duration));drawWaveform();}
-  else if(_dragging==='end'){_editorEnd=Math.max(_editorStart||0,Math.min(t,_editorAudioBuffer.duration));drawWaveform();}
-});
-document.addEventListener('mouseup',function(){_dragging=null;});
-
-function refreshAudioEditorUI(){
-  var empty=document.querySelector('#audioEditorEmpty'),config=document.querySelector('#audioEditorConfig'),btn=document.querySelector('#audioEditorExport');
-  if(!audioEditorFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return;}
-  empty.classList.remove('visible');config.style.display='flex';
-  document.querySelector('#audioEditorName').textContent=audioEditorFile.file.name;
-  document.querySelector('#audioEditorMeta').textContent=getAudioFormat(audioEditorFile.file.name)+' · '+formatSize(audioEditorFile.file.size)+' · '+formatTime(_editorAudioBuffer.duration);
-  document.querySelector('#audioEditorTime').textContent=_editorStart!==null?formatTime(_editorStart)+(_editorEnd!==null?' - '+formatTime(_editorEnd):''):'点击波形设置起点';
-  drawWaveform();
-  // Render segments list
-  var list=document.querySelector('#audioEditorSegments');list.innerHTML='';
-  _editorSegments.forEach(function(seg,i){
-    var item=document.createElement('div');item.className='merge-item';
-    item.innerHTML='<span style="font-weight:600;min-width:24px;color:var(--danger)">#'+(i+1)+'</span><div class="mi-info"><span class="mi-name">剪切片段 '+(i+1)+'</span><div class="mi-meta">'+formatTime(seg.start)+' → '+formatTime(seg.end)+'（'+formatTime(seg.end-seg.start)+'）</div></div><button class="mi-remove" data-idx="'+i+'">✕</button>';
-    item.querySelector('.mi-remove').addEventListener('click',function(e){e.stopPropagation();_editorSegments.splice(parseInt(this.dataset.idx),1);refreshAudioEditorUI();});
-    list.appendChild(item);
-  });
-  btn.disabled=_editorSegments.length===0;
-}
-
-document.querySelector('#audioEditorCut').addEventListener('click',function(){
-  if(_editorStart===null||_editorEnd===null||_editorStart>=_editorEnd){toast('请先在波形上设置起止点',true);return;}
-  _editorSegments.push({start:_editorStart,end:_editorEnd});
-  _editorSegments.sort(function(a,b){return a.start-b.start;});
-  _editorStart=null;_editorEnd=null;
-  refreshAudioEditorUI();
-});
-
-// Play/pause
-document.querySelector('#audioEditorPlay').addEventListener('click',function(){
-  if(_editorPlaying){if(_editorSource){try{_editorSource.stop()}catch(e){}}_editorPlaying=false;this.textContent='▶ 播放';return;}
-  var ctx=initAudioEditorCtx();if(!ctx||!_editorAudioBuffer)return;
-  _editorSource=ctx.createBufferSource();_editorSource.buffer=_editorAudioBuffer;_editorSource.connect(ctx.destination);
-  _editorSource.onended=function(){_editorPlaying=false;document.querySelector('#audioEditorPlay').textContent='▶ 播放';};
-  _editorSource.start(0);_editorPlaying=true;this.textContent='⏸ 暂停';
-});
-
-document.querySelector('#audioEditorRemove').addEventListener('click',function(){audioEditorFile=null;_editorWaveData=null;_editorSegments=[];refreshAudioEditorUI();});
-
-// Export: cut out all segments, keep the rest
-document.querySelector('#audioEditorExport').addEventListener('click',function(){payThen(async function(){
-  if(!audioEditorFile||!_editorSegments.length)return;
-  var btn=document.querySelector('#audioEditorExport');btn.classList.add('loading');btn.disabled=true;
-  try{
-    var f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return;}
-    var ext=audioEditorFile.file.name.split('.').pop();
-    await f.writeFile('input.'+ext,new Uint8Array(await audioEditorFile.file.arrayBuffer()));
-    // Calculate keep regions: parts NOT in any segment
-    var dur=_editorAudioBuffer.duration,keep=[],pos=0;
-    _editorSegments.sort(function(a,b){return a.start-b.start;});
-    for(var i=0;i<_editorSegments.length;i++){if(_editorSegments[i].start>pos)keep.push([pos,_editorSegments[i].start]);pos=_editorSegments[i].end;}
-    if(pos<dur)keep.push([pos,dur]);
-    if(!keep.length){toast('没有可保留的片段',true);return;}
-    // Extract, then concat
-    var listFile='',parts=[];
-    for(var i=0;i<keep.length;i++){
-      var partName='part_'+i+'.'+ext;
-      await f.exec(['-i','input.'+ext,'-ss',String(keep[i][0]),'-t',String(keep[i][1]-keep[i][0]),'-c','copy',partName]);
-      listFile+='file '+partName+'\n';parts.push(partName);
-    }
-    await f.writeFile('list.txt',listFile);
-    await f.exec(['-f','concat','-safe','0','-i','list.txt','-c','copy','output.'+ext]);
-    var out=await f.readFile('output.'+ext);
-    downloadBlob(new Blob([out],{type:audioEditorFile.file.type||'audio/'+ext}),audioEditorFile.file.name.replace(/\.([^.]+)$/,'_剪辑.$1'));
-    toast('✅ 已导出剪辑结果（保留 '+keep.length+' 段）');
-  }catch(err){toast('导出失败: '+(err.message||'未知错误'),true);}
-  finally{btn.classList.remove('loading');btn.disabled=false;}
-});});
 
 // ==================== INIT ====================
 if(typeof pdfjsLib !== 'undefined'){
@@ -1214,7 +1041,6 @@ function switchTab(tab){
     watermark:['拖拽 PDF 文件到此处','给 PDF 添加文字水印'],
     pagenum:['拖拽 PDF 文件到此处','给 PDF 添加页码'],
     'audio-convert':['拖拽音频文件到此处','批量转换音频格式 · 支持 MP3/WAV/FLAC/AAC/OGG/M4A'],
-    'audio-trim':['拖拽音频文件到此处','裁剪音频片段'],
     'audio-speed':['拖拽音频文件到此处','调整音频播放速度'],
     'audio-editor':['拖拽音频文件到此处','可视化波形剪辑'],
   };
@@ -1226,7 +1052,7 @@ function switchTab(tab){
   if(tab==='merge'||tab==='img2pdf')fileInput.multiple=true;else fileInput.multiple=false;
   if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else fileInput.accept='.pdf,application/pdf';
 
-  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert'||tab==='audio-trim'||tab==='audio-speed'||tab==='audio-editor')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
+  if(tab==='img2pdf')fileInput.accept='image/jpeg,image/png,image/webp';else if(tab==='audio-convert'||tab==='audio-speed'||tab==='audio-editor')fileInput.accept='audio/*';else fileInput.accept='.pdf,application/pdf';
   // Refresh tab-specific UI
   if(tab==='merge')refreshMergeUI();
   else if(tab==='split')refreshSplitUI();
@@ -1239,7 +1065,6 @@ function switchTab(tab){
   else if(tab==='watermark')refreshWatermarkUI();
   else if(tab==='pagenum')refreshPagenumUI();
   else if(tab==='audio-convert')refreshAudioUI();
-  else if(tab==='audio-trim')refreshAudioTrimUI();
   else if(tab==='audio-speed')refreshAudioSpeedUI();
   else if(tab==='audio-editor')refreshAudioEditorUI();
 
@@ -1533,10 +1358,10 @@ function handleDrop(fileList){
   if(activeTab==='img2pdf'){addImageFiles(fileList);return;}
   if(activeTab==='audio-convert'){addAudioFiles(fileList);return;}
   if(activeTab==='audio-editor'){handleAudioEditorFile(fileList[0]);return;}
-  if(activeTab==='audio-trim'||activeTab==='audio-speed'){
+  if(activeTab==='audio-speed'){
     var af=Array.from(fileList).filter(function(f){return f.type.startsWith('audio/')||/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(f.name);});
     if(!af.length){toast('未识别到音频文件',true);return;}
-    handleAudioSingle(af[0],activeTab==='audio-trim'?'trim':'speed');
+    handleAudioSingle(af[0],'speed');
     return;
   }
   const pdfs=Array.from(fileList).filter(f=>{
@@ -2900,43 +2725,15 @@ document.querySelector('#audioConvertBtn').addEventListener('click',function(){p
 
 
 
-// ==================== AUDIO TRIM & SPEED ====================
-var audioTrimFile=null,audioSpeedFile=null;
+// ==================== AUDIO SPEED ====================
+var audioSpeedFile=null;
 function parseTime(s){var p=s.split(':').map(Number);if(p.length===2)return p[0]*60+(p[1]||0);return p[0]||0;}
 function formatTime(sec){var m=Math.floor(sec/60),s=Math.floor(sec%60);return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
 async function handleAudioSingle(file,mode){
   if(!file.type.startsWith('audio/')&&!/\.(mp3|wav|flac|aac|ogg|m4a|wma|aiff)$/i.test(file.name)){toast('请上传音频文件',true);return;}
   var url=URL.createObjectURL(file);
-  if(mode==='trim'){audioTrimFile={file:file,url:url};refreshAudioTrimUI();}
-  else{audioSpeedFile={file:file,url:url};refreshAudioSpeedUI();}
+  audioSpeedFile={file:file,url:url};refreshAudioSpeedUI();
 }
-function refreshAudioTrimUI(){
-  var empty=document.querySelector('#audioTrimEmpty'),config=document.querySelector('#audioTrimConfig'),btn=document.querySelector('#audioTrimBtn');
-  if(!audioTrimFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return;}
-  empty.classList.remove('visible');config.style.display='flex';btn.disabled=false;
-  document.querySelector('#audioTrimName').textContent=audioTrimFile.file.name;
-  document.querySelector('#audioTrimMeta').textContent=getAudioFormat(audioTrimFile.file.name)+' · '+formatSize(audioTrimFile.file.size);
-  var player=document.querySelector('#audioTrimPlayer');player.src=audioTrimFile.url;
-  player.onloadedmetadata=function(){document.querySelector('#audioTrimEnd').value=formatTime(player.duration);};
-}
-document.querySelector('#audioTrimRemove').addEventListener('click',function(){if(audioTrimFile)URL.revokeObjectURL(audioTrimFile.url);audioTrimFile=null;refreshAudioTrimUI();});
-document.querySelector('#audioTrimBtn').addEventListener('click',function(){payThen(async function(){
-  if(!audioTrimFile)return;
-  var btn=document.querySelector('#audioTrimBtn');btn.classList.add('loading');btn.disabled=true;
-  try{
-    var f=await initFFmpeg();if(!f){toast('音频引擎未就绪',true);return;}
-    var start=parseTime(document.querySelector('#audioTrimStart').value);
-    var end=parseTime(document.querySelector('#audioTrimEnd').value);
-    if(end<=start){toast('结束时间必须大于开始时间',true);return;}
-    var dur=end-start,ext=audioTrimFile.file.name.split('.').pop();
-    await f.writeFile('input.'+ext,new Uint8Array(await audioTrimFile.file.arrayBuffer()));
-    await f.exec(['-i','input.'+ext,'-ss',String(start),'-t',String(dur),'-c','copy','output.'+ext]);
-    var out=await f.readFile('output.'+ext);
-    downloadBlob(new Blob([out],{type:audioTrimFile.file.type||'audio/'+ext}),audioTrimFile.file.name.replace(/\.([^.]+)$/,'_裁剪.$1'));
-    toast('✅ 已裁剪 '+formatTime(start)+' 至 '+formatTime(end));
-  }catch(err){toast('裁剪失败: '+(err.message||'未知错误'),true);}
-  finally{btn.classList.remove('loading');btn.disabled=false;}
-});});
 function refreshAudioSpeedUI(){
   var empty=document.querySelector('#audioSpeedEmpty'),config=document.querySelector('#audioSpeedConfig'),btn=document.querySelector('#audioSpeedBtn');
   if(!audioSpeedFile){empty.classList.add('visible');config.style.display='none';btn.disabled=true;return;}
@@ -2962,6 +2759,38 @@ document.querySelector('#audioSpeedBtn').addEventListener('click',function(){pay
   finally{btn.classList.remove('loading');btn.disabled=false;}
 });});
 
+// Speed preview - play audio at selected rate using Web Audio API
+var _speedPreviewCtx=null,_speedPreviewSource=null,_speedPreviewPlaying=false;
+document.querySelector('#audioSpeedPreview').addEventListener('click',function(){
+  if(_speedPreviewPlaying){stopSpeedPreview();return;}
+  if(!audioSpeedFile){toast('请先拖入音频文件',true);return;}
+  var btn=this,status=document.querySelector('#audioSpeedPreviewStatus');
+  btn.textContent='⏸ 停止预览';status.style.display='';
+  _speedPreviewPlaying=true;
+  try{
+    _speedPreviewCtx=new(window.AudioContext||window.webkitAudioContext)();
+    var rate=parseFloat(document.querySelector('#audioSpeedRate').value);
+    audioSpeedFile.file.arrayBuffer().then(function(buf){
+      return _speedPreviewCtx.decodeAudioData(buf);
+    }).then(function(audioBuffer){
+      if(!_speedPreviewPlaying)return;
+      _speedPreviewSource=_speedPreviewCtx.createBufferSource();
+      _speedPreviewSource.buffer=audioBuffer;
+      _speedPreviewSource.playbackRate.value=rate;
+      _speedPreviewSource.connect(_speedPreviewCtx.destination);
+      _speedPreviewSource.onended=function(){stopSpeedPreview();};
+      _speedPreviewSource.start(0);
+    }).catch(function(e){toast('预览失败: '+e.message,true);stopSpeedPreview();});
+  }catch(e){toast('浏览器不支持音频预览',true);stopSpeedPreview();}
+});
+function stopSpeedPreview(){
+  if(_speedPreviewSource){try{_speedPreviewSource.stop()}catch(e){}_speedPreviewSource=null;}
+  if(_speedPreviewCtx){try{_speedPreviewCtx.close()}catch(e){}_speedPreviewCtx=null;}
+  _speedPreviewPlaying=false;
+  var btn=document.querySelector('#audioSpeedPreview'),status=document.querySelector('#audioSpeedPreviewStatus');
+  if(btn)btn.textContent='🔊 预览倍速';
+  if(status)status.style.display='none';
+}
 
 // ==================== AUDIO EDITOR TAB ====================
 var audioEditorFile=null,_editorCtx=null,_editorWaveData=null,_editorStart=null,_editorEnd=null,_editorSegments=[],_editorAudioBuffer=null,_editorPlaying=false,_editorSource=null;
@@ -3061,6 +2890,9 @@ function refreshAudioEditorUI(){
     list.appendChild(item);
   });
   btn.disabled=_editorSegments.length===0;
+  // Update play button text
+  var playBtn=document.querySelector('#audioEditorPlay');
+  if(playBtn&&!_editorPlaying)playBtn.textContent=_editorSegments.length?'▶ 预览剪辑效果':'▶ 播放';
 }
 
 document.querySelector('#audioEditorCut').addEventListener('click',function(){
@@ -3071,14 +2903,58 @@ document.querySelector('#audioEditorCut').addEventListener('click',function(){
   refreshAudioEditorUI();
 });
 
-// Play/pause
+// Play/pause — skips cut segments when they exist
+var _editorPreviewSources=[];
 document.querySelector('#audioEditorPlay').addEventListener('click',function(){
-  if(_editorPlaying){if(_editorSource){try{_editorSource.stop()}catch(e){}}_editorPlaying=false;this.textContent='▶ 播放';return;}
+  if(_editorPlaying){stopEditorPreview();return;}
   var ctx=initAudioEditorCtx();if(!ctx||!_editorAudioBuffer)return;
-  _editorSource=ctx.createBufferSource();_editorSource.buffer=_editorAudioBuffer;_editorSource.connect(ctx.destination);
-  _editorSource.onended=function(){_editorPlaying=false;document.querySelector('#audioEditorPlay').textContent='▶ 播放';};
-  _editorSource.start(0);_editorPlaying=true;this.textContent='⏸ 暂停';
+
+  // Calculate keep regions (skip cut segments)
+  var dur=_editorAudioBuffer.duration;
+  var keep=[];
+  if(_editorSegments.length){
+    var sorted=_editorSegments.slice().sort(function(a,b){return a.start-b.start;});
+    var pos=0;
+    for(var i=0;i<sorted.length;i++){if(sorted[i].start>pos)keep.push([pos,sorted[i].start]);pos=sorted[i].end;}
+    if(pos<dur)keep.push([pos,dur]);
+    if(!keep.length){toast('没有可预览的片段',true);return;}
+  }else{
+    keep=[[0,dur]];
+  }
+
+  _editorPlaying=true;_editorPreviewSources=[];
+  var hasCuts=_editorSegments.length>0;
+  this.textContent='⏸ 停止预览';
+
+  function scheduleRegion(idx){
+    if(idx>=keep.length||!_editorPlaying){finishPreview();return;}
+    var src=ctx.createBufferSource();
+    src.buffer=_editorAudioBuffer;
+    src.connect(ctx.destination);
+    _editorPreviewSources.push(src);
+    var offset=keep[idx][0],regionDur=keep[idx][1]-keep[idx][0];
+    src.onended=function(){scheduleRegion(idx+1);};
+    src.start(0,offset,regionDur);
+  }
+
+  scheduleRegion(0);
+
+  function finishPreview(){
+    _editorPlaying=false;_editorPreviewSources=[];
+    var btn=document.querySelector('#audioEditorPlay');
+    if(btn)btn.textContent=_editorSegments.length?'▶ 预览剪辑效果':'▶ 播放';
+  }
 });
+
+function stopEditorPreview(){
+  if(_editorPreviewSources.length){
+    _editorPreviewSources.forEach(function(s){try{s.stop()}catch(e){}});
+    _editorPreviewSources=[];
+  }
+  _editorPlaying=false;
+  var btn=document.querySelector('#audioEditorPlay');
+  if(btn)btn.textContent=_editorSegments.length?'▶ 预览剪辑效果':'▶ 播放';
+}
 
 document.querySelector('#audioEditorRemove').addEventListener('click',function(){audioEditorFile=null;_editorWaveData=null;_editorSegments=[];refreshAudioEditorUI();});
 
