@@ -1074,15 +1074,6 @@ function switchTab(tab){
 }
 
 $$('.side-tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
-// Sidebar group collapse/expand
-$$('.side-group-title').forEach(btn=>btn.addEventListener('click',function(){
-  const group=this.dataset.group;
-  const items=document.querySelector('#group-'+group);
-  if(!items)return;
-  const isOpen=items.style.display!=='none';
-  if(isOpen){items.style.display='none';this.classList.remove('open');}
-  else{items.style.display='';this.classList.add('open');}
-}));
 
 
 function updateDropZoneState(){
