@@ -661,15 +661,17 @@ body{
         <button class="fi-remove" id="audioEditorRemove">✕</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="pg-btn" id="audioEditorPlay">▶ 播放</button>
-        <span id="audioEditorTime" style="font-size:12px;color:var(--text-muted);font-family:monospace">00:00 / 00:00</span>
+        <button class="pg-btn" id="audioEditorPlay" style="flex-shrink:0">▶</button>
+        <span id="audioEditorTime" style="font-size:12px;color:var(--text-muted);font-family:monospace;min-width:105px">00:00 / 00:00</span>
+        <input type="range" id="audioEditorSeek" min="0" max="100" value="0" step="0.05" style="flex:1;accent-color:var(--primary);cursor:pointer;min-width:60px">
       </div>
+      <audio id="audioEditorAudio" style="display:none"></audio>
       <canvas id="audioEditorWave" width="900" height="160" style="width:100%;height:160px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;cursor:crosshair"></canvas>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" id="audioEditorCut" style="flex:1">✂️ 添加剪切片段</button>
       </div>
       <div class="merge-list" id="audioEditorSegments"></div>
-      <div style="font-size:12px;color:var(--text-muted)">💡 点击波形设置起点，Shift+点击设置终点，然后点「添加剪切片段」。拖拽标记可微调。</div>
+      <div style="font-size:12px;color:var(--text-muted)">💡 点击波形设置起点，Shift+点击设置终点，然后点「添加剪切片段」。拖拽进度条或点击波形可定位播放位置，播放时自动跳过裁剪区域。</div>
     </div>
     <div class="actions" style="margin-top:8px">
       <button class="btn btn-primary" id="audioEditorExport" disabled>
@@ -697,9 +699,7 @@ body{
           <option value="1.5" selected>1.5x（快放）</option>
           <option value="2.0">2.0x（倍速）</option>
         </select>
-        <span style="font-size:11px;color:var(--text-muted)">保持音调不变</span>
-        <button class="pg-btn" id="audioSpeedPreview">🔊 预览倍速</button>
-        <span id="audioSpeedPreviewStatus" style="font-size:11px;color:var(--primary);display:none">正在播放预览…</span>
+        <span style="font-size:11px;color:var(--text-muted)">保持音调不变 · 上方播放器跟随倍速</span>
       </div>
     </div>
     <div class="actions" style="margin-top:8px">
@@ -2741,6 +2741,7 @@ function refreshAudioSpeedUI(){
   document.querySelector('#audioSpeedName').textContent=audioSpeedFile.file.name;
   document.querySelector('#audioSpeedMeta').textContent=getAudioFormat(audioSpeedFile.file.name)+' · '+formatSize(audioSpeedFile.file.size);
   document.querySelector('#audioSpeedPlayer').src=audioSpeedFile.url;
+  document.querySelector('#audioSpeedPlayer').playbackRate=parseFloat(document.querySelector('#audioSpeedRate').value);
 }
 document.querySelector('#audioSpeedRemove').addEventListener('click',function(){if(audioSpeedFile)URL.revokeObjectURL(audioSpeedFile.url);audioSpeedFile=null;refreshAudioSpeedUI();});
 document.querySelector('#audioSpeedBtn').addEventListener('click',function(){payThen(async function(){
@@ -2759,38 +2760,11 @@ document.querySelector('#audioSpeedBtn').addEventListener('click',function(){pay
   finally{btn.classList.remove('loading');btn.disabled=false;}
 });});
 
-// Speed preview - play audio at selected rate using Web Audio API
-var _speedPreviewCtx=null,_speedPreviewSource=null,_speedPreviewPlaying=false;
-document.querySelector('#audioSpeedPreview').addEventListener('click',function(){
-  if(_speedPreviewPlaying){stopSpeedPreview();return;}
-  if(!audioSpeedFile){toast('请先拖入音频文件',true);return;}
-  var btn=this,status=document.querySelector('#audioSpeedPreviewStatus');
-  btn.textContent='⏸ 停止预览';status.style.display='';
-  _speedPreviewPlaying=true;
-  try{
-    _speedPreviewCtx=new(window.AudioContext||window.webkitAudioContext)();
-    var rate=parseFloat(document.querySelector('#audioSpeedRate').value);
-    audioSpeedFile.file.arrayBuffer().then(function(buf){
-      return _speedPreviewCtx.decodeAudioData(buf);
-    }).then(function(audioBuffer){
-      if(!_speedPreviewPlaying)return;
-      _speedPreviewSource=_speedPreviewCtx.createBufferSource();
-      _speedPreviewSource.buffer=audioBuffer;
-      _speedPreviewSource.playbackRate.value=rate;
-      _speedPreviewSource.connect(_speedPreviewCtx.destination);
-      _speedPreviewSource.onended=function(){stopSpeedPreview();};
-      _speedPreviewSource.start(0);
-    }).catch(function(e){toast('预览失败: '+e.message,true);stopSpeedPreview();});
-  }catch(e){toast('浏览器不支持音频预览',true);stopSpeedPreview();}
+// Bind speed selector to native audio player playbackRate
+document.querySelector('#audioSpeedRate').addEventListener('change',function(){
+  var player=document.querySelector('#audioSpeedPlayer');
+  if(player)player.playbackRate=parseFloat(this.value);
 });
-function stopSpeedPreview(){
-  if(_speedPreviewSource){try{_speedPreviewSource.stop()}catch(e){}_speedPreviewSource=null;}
-  if(_speedPreviewCtx){try{_speedPreviewCtx.close()}catch(e){}_speedPreviewCtx=null;}
-  _speedPreviewPlaying=false;
-  var btn=document.querySelector('#audioSpeedPreview'),status=document.querySelector('#audioSpeedPreviewStatus');
-  if(btn)btn.textContent='🔊 预览倍速';
-  if(status)status.style.display='none';
-}
 
 // ==================== AUDIO EDITOR TAB ====================
 var audioEditorFile=null,_editorCtx=null,_editorWaveData=null,_editorStart=null,_editorEnd=null,_editorSegments=[],_editorAudioBuffer=null,_editorPlaying=false,_editorSource=null;
@@ -2879,7 +2853,15 @@ function refreshAudioEditorUI(){
   empty.classList.remove('visible');config.style.display='flex';
   document.querySelector('#audioEditorName').textContent=audioEditorFile.file.name;
   document.querySelector('#audioEditorMeta').textContent=getAudioFormat(audioEditorFile.file.name)+' · '+formatSize(audioEditorFile.file.size)+' · '+formatTime(_editorAudioBuffer.duration);
-  document.querySelector('#audioEditorTime').textContent=_editorStart!==null?formatTime(_editorStart)+(_editorEnd!==null?' - '+formatTime(_editorEnd):''):'点击波形设置起点';
+  // Show marker times when setting markers, otherwise show seek position
+  if(_editorStart!==null){
+    document.querySelector('#audioEditorTime').textContent=formatTime(_editorStart)+(_editorEnd!==null?' - '+formatTime(_editorEnd):'');
+  }else if(!_editorPlaying){
+    updateEditorTimeDisplay();
+  }
+  // Set seek bar range
+  var seekBar=document.querySelector('#audioEditorSeek');
+  if(seekBar&&_editorAudioBuffer){seekBar.max=_editorAudioBuffer.duration;}
   drawWaveform();
   // Render segments list
   var list=document.querySelector('#audioEditorSegments');list.innerHTML='';
@@ -2892,7 +2874,7 @@ function refreshAudioEditorUI(){
   btn.disabled=_editorSegments.length===0;
   // Update play button text
   var playBtn=document.querySelector('#audioEditorPlay');
-  if(playBtn&&!_editorPlaying)playBtn.textContent=_editorSegments.length?'▶ 预览剪辑效果':'▶ 播放';
+  if(playBtn&&!_editorPlaying)playBtn.textContent='▶';
 }
 
 document.querySelector('#audioEditorCut').addEventListener('click',function(){
@@ -2903,57 +2885,109 @@ document.querySelector('#audioEditorCut').addEventListener('click',function(){
   refreshAudioEditorUI();
 });
 
-// Play/pause — skips cut segments when they exist
-var _editorPreviewSources=[];
+// Play/pause with seek support — skips cut segments
+var _editorPreviewSources=[],_editorSeekAnim=null;
+var _editorPlayCtx=null,_editorPlayStart=0,_editorPlayKeep=null,_editorPlayStartIdx=0,_editorPlayStartOff=0;
+
+function _editorCalcKeep(){
+  var dur=_editorAudioBuffer.duration;
+  if(!_editorSegments.length)return [[0,dur]];
+  var sorted=_editorSegments.slice().sort(function(a,b){return a.start-b.start;});
+  var keep=[],pos=0;
+  for(var i=0;i<sorted.length;i++){if(sorted[i].start>pos)keep.push([pos,sorted[i].start]);pos=sorted[i].end;}
+  if(pos<dur)keep.push([pos,dur]);
+  return keep;
+}
+
 document.querySelector('#audioEditorPlay').addEventListener('click',function(){
   if(_editorPlaying){stopEditorPreview();return;}
   var ctx=initAudioEditorCtx();if(!ctx||!_editorAudioBuffer)return;
 
-  // Calculate keep regions (skip cut segments)
-  var dur=_editorAudioBuffer.duration;
-  var keep=[];
-  if(_editorSegments.length){
-    var sorted=_editorSegments.slice().sort(function(a,b){return a.start-b.start;});
-    var pos=0;
-    for(var i=0;i<sorted.length;i++){if(sorted[i].start>pos)keep.push([pos,sorted[i].start]);pos=sorted[i].end;}
-    if(pos<dur)keep.push([pos,dur]);
-    if(!keep.length){toast('没有可预览的片段',true);return;}
-  }else{
-    keep=[[0,dur]];
+  var keep=_editorCalcKeep();
+  if(!keep.length){toast('没有可预览的片段',true);return;}
+
+  var seekFrom=parseFloat(document.querySelector('#audioEditorSeek').value)||0;
+  // Find start region: if seek falls in a cut, jump forward to next keep
+  var startIdx=-1,startOff=0;
+  for(var i=0;i<keep.length;i++){
+    if(seekFrom>=keep[i][0]&&seekFrom<keep[i][1]){startIdx=i;startOff=seekFrom-keep[i][0];break;}
+    if(seekFrom<keep[i][0]){startIdx=i;startOff=0;break;}
   }
+  if(startIdx<0){toast('当前位置无可播放内容',true);return;}
 
   _editorPlaying=true;_editorPreviewSources=[];
-  var hasCuts=_editorSegments.length>0;
-  this.textContent='⏸ 停止预览';
+  _editorPlayCtx=ctx;_editorPlayStart=ctx.currentTime;
+  _editorPlayKeep=keep;_editorPlayStartIdx=startIdx;_editorPlayStartOff=startOff;
 
-  function scheduleRegion(idx){
-    if(idx>=keep.length||!_editorPlaying){finishPreview();return;}
-    var src=ctx.createBufferSource();
-    src.buffer=_editorAudioBuffer;
-    src.connect(ctx.destination);
-    _editorPreviewSources.push(src);
-    var offset=keep[idx][0],regionDur=keep[idx][1]-keep[idx][0];
-    src.onended=function(){scheduleRegion(idx+1);};
-    src.start(0,offset,regionDur);
-  }
-
-  scheduleRegion(0);
-
-  function finishPreview(){
-    _editorPlaying=false;_editorPreviewSources=[];
-    var btn=document.querySelector('#audioEditorPlay');
-    if(btn)btn.textContent=_editorSegments.length?'▶ 预览剪辑效果':'▶ 播放';
-  }
+  this.textContent='⏸';
+  _scheduleKeepRegion(startIdx,startOff);
+  _startSeekTick();
 });
+
+function _scheduleKeepRegion(idx,off){
+  var keep=_editorPlayKeep,ctx=_editorPlayCtx;
+  if(!keep||idx>=keep.length)return;
+  var offset=keep[idx][0]+off;
+  var dur=keep[idx][1]-offset;
+  if(dur<=0.001){_scheduleKeepRegion(idx+1,0);return;}
+  var src=ctx.createBufferSource();
+  src.buffer=_editorAudioBuffer;
+  src.connect(ctx.destination);
+  _editorPreviewSources.push(src);
+  src.onended=function(){if(_editorPlaying)_scheduleKeepRegion(idx+1,0);};
+  src.start(0,offset,dur);
+}
+
+function _startSeekTick(){
+  function tick(){
+    if(!_editorPlaying){_editorSeekAnim=null;return;}
+    var ctx=_editorPlayCtx;
+    if(!ctx){_editorSeekAnim=null;return;}
+    var elapsed=ctx.currentTime-_editorPlayStart;
+    // Walk through keep regions to find position
+    var pos=elapsed,keep=_editorPlayKeep;
+    if(keep){
+      for(var i=_editorPlayStartIdx;i<keep.length;i++){
+        var segLen=keep[i][1]-keep[i][0]-(i===_editorPlayStartIdx?_editorPlayStartOff:0);
+        if(pos<=segLen){pos=keep[i][0]+(i===_editorPlayStartIdx?_editorPlayStartOff:0)+pos;break;}
+        pos-=segLen;
+        if(i===keep.length-1){pos=keep[i][1];}
+      }
+    }
+    var seekBar=document.querySelector('#audioEditorSeek');
+    if(seekBar&&!_seekDragging)seekBar.value=Math.min(pos,_editorAudioBuffer.duration||100);
+    updateEditorTimeDisplay();
+    _editorSeekAnim=requestAnimationFrame(tick);
+  }
+  _editorSeekAnim=requestAnimationFrame(tick);
+}
+
+var _seekDragging=false;
+document.querySelector('#audioEditorSeek').addEventListener('input',function(){
+  if(_editorPlaying)stopEditorPreview();
+  updateEditorTimeDisplay();
+});
+document.querySelector('#audioEditorSeek').addEventListener('mousedown',function(){_seekDragging=true;});
+document.querySelector('#audioEditorSeek').addEventListener('mouseup',function(){_seekDragging=false;});
+
+function updateEditorTimeDisplay(){
+  var seekBar=document.querySelector('#audioEditorSeek');
+  var pos=seekBar?parseFloat(seekBar.value):0;
+  var dur=(_editorAudioBuffer&&_editorAudioBuffer.duration)||0;
+  var timeEl=document.querySelector('#audioEditorTime');
+  if(timeEl)timeEl.textContent=formatTime(pos)+' / '+formatTime(dur);
+}
 
 function stopEditorPreview(){
   if(_editorPreviewSources.length){
     _editorPreviewSources.forEach(function(s){try{s.stop()}catch(e){}});
     _editorPreviewSources=[];
   }
-  _editorPlaying=false;
+  if(_editorSeekAnim){cancelAnimationFrame(_editorSeekAnim);_editorSeekAnim=null;}
+  _editorPlaying=false;_editorPlayKeep=null;
   var btn=document.querySelector('#audioEditorPlay');
-  if(btn)btn.textContent=_editorSegments.length?'▶ 预览剪辑效果':'▶ 播放';
+  if(btn)btn.textContent='▶';
+  updateEditorTimeDisplay();
 }
 
 document.querySelector('#audioEditorRemove').addEventListener('click',function(){audioEditorFile=null;_editorWaveData=null;_editorSegments=[];refreshAudioEditorUI();});
