@@ -2518,10 +2518,33 @@ async function decryptNCM(bytes){
   if(bytes[8]===1){for(var i=0;i<encKey.length;i++)encKey[i]^=0x64;}
   var ncmAesKey=new Uint8Array([0x68,0x7A,0x48,0x52,0x41,0x6D,0x73,0x6F,0x35,0x6B,0x49,0x6E,0x62,0x61,0x78,0x57]);
   var decKey=aes128EcbDecrypt(ncmAesKey,encKey);
+  // v1 NCM: key is ASCII text, audio uses simple repeating XOR (not RC4!)
+  var useRC4=(bytes[8]!==1);
+  // For v1: print first 8 bytes of key as ASCII
+  if(!useRC4){
+    var keyStr='';for(var i=0;i<Math.min(decKey.length,16);i++){var c=decKey[i];keyStr+=(c>=32&&c<127)?String.fromCharCode(c):'.';}
+    status('v1 key ASCII: '+keyStr+' ... (trying XOR)');
+  }
   // Try nearby offsets: RC4 needs EXACT alignment — being off by 1 byte corrupts everything
   var bestOff=audioStart;
   var foundOff=false,scanFrom=audioStart;
-  // Generate RC4 keystream once, then scan for correct offset
+  var subtleHex='';
+  try{
+    var subtleKey=await crypto.subtle.importKey('raw',ncmAesKey.slice(0),{name:'AES-CBC'},false,['decrypt']);
+    var subtleDec=await crypto.subtle.decrypt({name:'AES-CBC',iv:new Uint8Array(16)},subtleKey,encKey.slice(0,16));
+    subtleHex=Array.from(new Uint8Array(subtleDec).slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  }catch(e){subtleHex='err'}
+  var decHex=Array.from(decKey.slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  // v1 NCM: simple repeating XOR with ASCII key (no RC4)
+  if(bytes[8]===1){
+    var len=view.byteLength-audioStart,out=new Uint8Array(len);
+    for(var i=0;i<len;i++)out[i]=bytes[audioStart+i]^decKey[i%decKey.length];
+    status('v1 XOR decrypt: key='+decHex+' len='+len+' off='+audioStart);
+    return out.length>1024?out:null;
+  }
+  // v0 NCM: RC4 stream cipher
+  var foundOff=false,scanFrom=audioStart,bestOff=audioStart;
+  // Generate RC4 keystream once
   var streamLen=Math.min(300,view.byteLength-audioStart);
   var keystream=new Uint8Array(streamLen);
   var ss=new Uint8Array(256);for(var i=0;i<256;i++)ss[i]=i;
@@ -2532,17 +2555,8 @@ async function decryptNCM(bytes){
     var t0=bytes[tryOff]^keystream[0],t1=bytes[tryOff+1]^keystream[1],t2=bytes[tryOff+2]^keystream[2],t3=bytes[tryOff+3]^keystream[3];
     if((t0===0xFF&&(t1&0xE0)===0xE0)||(t0===0x49&&t1===0x44&&t2===0x33)||(t0===0x66&&t1===0x4C&&t2===0x61&&t3===0x43)){audioStart=tryOff;foundOff=true;break;}
   }
-  // Also try crypto.subtle for comparison (AES-CBC first block)
-  var subtleHex='';
-  try{
-    var subtleKey=await crypto.subtle.importKey('raw',ncmAesKey.slice(0),{name:'AES-CBC'},false,['decrypt']);
-    var subtleDec=await crypto.subtle.decrypt({name:'AES-CBC',iv:new Uint8Array(16)},subtleKey,encKey.slice(0,16));
-    subtleHex=Array.from(new Uint8Array(subtleDec).slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  }catch(e){subtleHex='err'}
-  var decHex=Array.from(decKey.slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  var ks0=bytes[audioStart]^0xFF;
-  status('AES:'+(_aesUsed||'?')+' ver='+ver+' keyLen='+keyLen+' dec='+decHex+' sub='+subtleHex+' ks[0]='+(ks0.toString(16))+' k[0]='+(keystream[0].toString(16))+(foundOff?' ok':' noMatch'));
-  // RC4 KSA + PRGA with correct offset
+  status('AES:'+(_aesUsed||'?')+' ver='+ver+' keyLen='+keyLen+' dec='+decHex+' sub='+subtleHex+' ks[0]='+(bytes[audioStart]^0xFF).toString(16)+' k[0]='+(keystream[0].toString(16))+(foundOff?' ok':' noMatch'));
+  // v0 RC4 decrypt
   var S=new Uint8Array(256);
   for(var i=0;i<256;i++)S[i]=i;
   var j=0;
