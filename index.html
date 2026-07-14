@@ -2464,49 +2464,23 @@ function toU8(buf){return buf instanceof Uint8Array?buf:new Uint8Array(buf);}
 // NCM (NetEase Cloud Music) decryption
 async function decryptNCM(bytes){
   var view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-  if(view.byteLength<64)return null;
   var off=10;
   var keyLen=view.getUint32(off,true);off+=4;
-  if(off+keyLen+4>view.byteLength)return null;
-  var encKey=bytes.slice(off,off+keyLen);off+=keyLen;
-  var metaLen=view.getUint32(off,true);off+=4;
-  off+=metaLen+5; // skip meta + 5 byte gap
-  if(off+4>view.byteLength)return null;
-  off+=4+view.getUint32(off,true); // skip image size + image data
-  var audioStart=off;
-  // ALL NCM versions: XOR key data with 0x64 before AES
-  for(var i=0;i<encKey.length;i++)encKey[i]^=0x64;
-  // AES-128-ECB decrypt the RC4 key
-  var ncmAesKey=new Uint8Array([0x68,0x7A,0x48,0x52,0x41,0x6D,0x73,0x6F,0x35,0x6B,0x49,0x6E,0x62,0x61,0x78,0x57]);
-  var decKey=aesEcbDecrypt(ncmAesKey,encKey);
-  // Discard first 17 bytes ("neteasecloudmusic" padding)
-  if(decKey.length>17)decKey=decKey.slice(17);
-  // Generate first 16 keystream bytes and scan for correct audio offset
-  var S=new Uint8Array(256);for(var i=0;i<256;i++)S[i]=i;
-  var j=0;for(var i=0;i<256;i++){j=(j+S[i]+decKey[i%decKey.length])&0xff;var t=S[i];S[i]=S[j];S[j]=t;}
-  var ks16=new Uint8Array(16);var x=0,y=0;for(var i=0;i<16;i++){x=(x+1)&0xff;y=(y+S[x])&0xff;t=S[x];S[x]=S[y];S[y]=t;ks16[i]=S[(S[x]+S[y])&0xff];}
-  for(var tryOff=Math.max(0,audioStart-200);tryOff<=audioStart+200;tryOff++){
-    if(tryOff+4>view.byteLength)continue;
-    var t0=bytes[tryOff]^ks16[0],t1=bytes[tryOff+1]^ks16[1],t2=bytes[tryOff+2]^ks16[2],t3=bytes[tryOff+3]^ks16[3];
-    if((t0===0xFF&&(t1&0xE0)===0xE0)||(t0===0x49&&t1===0x44&&t2===0x33)||(t0===0x66&&t1===0x4C&&t2===0x61&&t3===0x43)){audioStart=tryOff;break;}
-  }
-  // RC4 KSA (full)
-  var S=new Uint8Array(256);
-  for(var i=0;i<256;i++)S[i]=i;
-  var j=0;
-  for(var i=0;i<256;i++){j=(j+S[i]+decKey[i%decKey.length])&0xff;var t=S[i];S[i]=S[j];S[j]=t;}
-  // RC4 PRGA decrypt
-  var len=view.byteLength-audioStart;
-  var out=new Uint8Array(len);
-  var x=0,y=0;
-  for(var i=0;i<len;i++){
-    x=(x+1)&0xff;y=(y+S[x])&0xff;var t=S[x];S[x]=S[y];S[y]=t;
-    out[i]=bytes[audioStart+i]^S[(S[x]+S[y])&0xff];
-  }
-  return out.length>1024?out:null;
+  var cipherText=new Uint8Array(bytes.slice(off,off+keyLen)).map(function(b){return b^0x64;});
+  off+=keyLen;
+  var keyWA=CryptoJS.enc.Hex.parse("687a4852416d736f356b496e62617857");
+  var plainText=CryptoJS.AES.decrypt({ciphertext:CryptoJS.lib.WordArray.create(cipherText)},keyWA,{mode:CryptoJS.mode.ECB,padding:CryptoJS.pad.Pkcs7});
+  var keyData=new Uint8Array(plainText.sigBytes);
+  for(var i=0;i<plainText.sigBytes;i++)keyData[i]=(plainText.words[i>>>2]>>>(24-(i%4)*8))&0xff;
+  keyData=keyData.slice(17);
+  var box=new Uint8Array(256);for(var i=0;i<256;i++)box[i]=i;
+  var j=0;for(var i=0;i<256;i++){j=(box[i]+j+keyData[i%keyData.length])&0xff;var t=box[i];box[i]=box[j];box[j]=t;}
+  var keyBox=box.map(function(_,i,arr){i=(i+1)&0xff;var si=arr[i];var sj=arr[(i+si)&0xff];return arr[(si+sj)&0xff];});
+  off+=view.getUint32(off+5,true)+13;
+  var audioData=new Uint8Array(bytes.slice(off));
+  for(var i=0;i<audioData.length;i++)audioData[i]^=keyBox[i&0xff];
+  return audioData.length>1024?audioData:null;
 }
-
-// QMC/MGG/MFLAC (QQ Music) decryption
 function decryptQMC(buf, ext){
   var bytes=toU8(buf);ext=(ext||'').toLowerCase();
   var audioOff=0;
