@@ -2518,17 +2518,21 @@ async function decryptNCM(bytes){
   // Try nearby offsets: RC4 needs EXACT alignment — being off by 1 byte corrupts everything
   var bestOff=audioStart;
   var foundOff=false,scanFrom=audioStart;
-  for(var tryOff=Math.max(0,audioStart-16);tryOff<=audioStart+16;tryOff++){
-    if(tryOff+16>view.byteLength)continue;
-    var testS=new Uint8Array(256);for(var i=0;i<256;i++)testS[i]=i;
-    var tj=0;for(var i=0;i<256;i++){tj=(tj+testS[i]+decKey[i%decKey.length])&0xff;var tt=testS[i];testS[i]=testS[tj];testS[tj]=tt;}
-    var tx=0,ty=0,testOut=new Uint8Array(16);
-    for(var i=0;i<16;i++){tx=(tx+1)&0xff;ty=(ty+testS[tx])&0xff;tt=testS[tx];testS[tx]=testS[ty];testS[ty]=tt;testOut[i]=bytes[tryOff+i]^testS[(testS[tx]+testS[ty])&0xff];}
-    if((testOut[0]===0xFF&&(testOut[1]&0xE0)===0xE0)||(testOut[0]===0x49&&testOut[1]===0x44&&testOut[2]===0x33)||(testOut[0]===0x66&&testOut[1]===0x4C&&testOut[2]===0x61&&testOut[3]===0x43)){bestOff=tryOff;foundOff=true;break;}
+  // Generate RC4 keystream once, then scan for correct offset
+  var streamLen=Math.min(300,view.byteLength-audioStart);
+  var keystream=new Uint8Array(streamLen);
+  var ss=new Uint8Array(256);for(var i=0;i<256;i++)ss[i]=i;
+  var sj=0;for(var i=0;i<256;i++){sj=(sj+ss[i]+decKey[i%decKey.length])&0xff;var st=ss[i];ss[i]=ss[sj];ss[sj]=st;}
+  var sx=0,sy=0;for(var i=0;i<streamLen;i++){sx=(sx+1)&0xff;sy=(sy+ss[sx])&0xff;st=ss[sx];ss[sx]=ss[sy];ss[sy]=st;keystream[i]=ss[(ss[sx]+ss[sy])&0xff];}
+  for(var tryOff=Math.max(0,audioStart-200);tryOff<=audioStart+200;tryOff++){
+    if(tryOff+4>view.byteLength)continue;
+    var t0=bytes[tryOff]^keystream[0],t1=bytes[tryOff+1]^keystream[1],t2=bytes[tryOff+2]^keystream[2],t3=bytes[tryOff+3]^keystream[3];
+    if((t0===0xFF&&(t1&0xE0)===0xE0)||(t0===0x49&&t1===0x44&&t2===0x33)||(t0===0x66&&t1===0x4C&&t2===0x61&&t3===0x43)){audioStart=tryOff;foundOff=true;break;}
   }
-  audioStart=bestOff;
   var decHex=Array.from(decKey.slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  status('AES:'+(_aesUsed||'?')+' keyLen='+keyLen+' enc='+encHex+' dec='+decHex+' off='+audioStart+(foundOff?' ok':(audioStart!==scanFrom?'':' noMatch')));
+  // What the first keystream byte SHOULD be if it's MP3 (0xFF sync)
+  var ks0=bytes[audioStart]^0xFF; // if output is 0xFF, keystream[0] = encrypted XOR 0xFF
+  status('AES:'+(_aesUsed||'?')+' keyLen='+keyLen+' dec='+decHex+' ks[0]='+(ks0.toString(16))+' k[0]='+(keystream[0].toString(16))+(foundOff?' ok':' noMatch'));
   // RC4 KSA + PRGA with correct offset
   var S=new Uint8Array(256);
   for(var i=0;i<256;i++)S[i]=i;
