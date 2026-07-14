@@ -2815,8 +2815,8 @@ function drawWaveform(){
     var mx=_editorEnd/dur*w;ctx.strokeStyle='#EF4444';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,h);ctx.stroke();
     ctx.fillStyle='#EF4444';ctx.beginPath();ctx.arc(mx,10,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText('E',mx,14);
   }
-  // Draw playhead cursor
-  if(_editorSeekPos>0||_editorPlaying){
+  // Draw playhead cursor (always visible when audio loaded)
+  if(_editorAudioBuffer){
     var px=(_editorSeekPos/dur)*w;
     ctx.strokeStyle='#F59E0B';ctx.lineWidth=2;ctx.setLineDash([4,3]);
     ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,h);ctx.stroke();
