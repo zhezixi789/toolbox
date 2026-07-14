@@ -2483,34 +2483,42 @@ function toU8(buf){return buf instanceof Uint8Array?buf:new Uint8Array(buf);}
 
 // NCM (NetEase Cloud Music) decryption
 async function decryptNCM(bytes){
-  var view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),off=10;
-  if(view.byteLength<20)return null;
+  var view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  if(view.byteLength<64)return null;
+  // Parse header to get encrypted key
+  var off=10;
   var keyLen=view.getUint32(off,true);off+=4;
-  if(off+keyLen>view.byteLength)return null;
+  if(off+keyLen+4>view.byteLength)return null;
   var encKey=bytes.slice(off,off+keyLen);off+=keyLen;
   var metaLen=view.getUint32(off,true);off+=4;
-  off+=metaLen;
-  // Skip CRC(4) + album image size(4) + album image
-  if(off+9>view.byteLength)return null;
-  off+=5;
+  off+=metaLen+5; // skip meta + 5 byte gap
+  if(off+4>view.byteLength)return null;
   var imgSize=view.getUint32(off,true);off+=4+imgSize;
-  if(off>=view.byteLength)return null;
+  // Scan forward for audio magic bytes (MP3/FLAC) in case header has extra fields
+  var searchStart=Math.max(off,0),audioStart=-1;
+  for(var i=searchStart;i<view.byteLength-4&&i<searchStart+4096;i++){
+    if((bytes[i]===0xFF&&(bytes[i+1]&0xE0)===0xE0)||(bytes[i]===0x49&&bytes[i+1]===0x44&&bytes[i+2]===0x33)){audioStart=i;break;}
+    if(bytes[i]===0x66&&bytes[i+1]===0x4C&&bytes[i+2]===0x61&&bytes[i+3]===0x43){audioStart=i;break;}
+    if(bytes[i]===0x4F&&bytes[i+1]===0x67&&bytes[i+2]===0x67&&bytes[i+3]===0x53){audioStart=i;break;}
+  }
+  if(audioStart<0){audioStart=off;} // fallback to calculated offset
   // AES decrypt the key
   var ncmAesKey=new Uint8Array([0x68,0x7A,0x48,0x52,0x41,0x6D,0x73,0x6F,0x35,0x6B,0x49,0x6E,0x62,0x61,0x78,0x57]);
   var decKey=aes128EcbDecrypt(ncmAesKey,encKey);
-  // RC4-like key schedule
-  var keyBox=new Uint8Array(256);
-  for(var i=0;i<256;i++)keyBox[i]=i;
+  // RC4 KSA
+  var S=new Uint8Array(256);
+  for(var i=0;i<256;i++)S[i]=i;
   var j=0;
-  for(var i=0;i<256;i++){j=(j+keyBox[i]+decKey[i%decKey.length])&0xff;var t=keyBox[i];keyBox[i]=keyBox[j];keyBox[j]=t;}
-  // XOR decrypt audio data
-  var audioData=new Uint8Array(view.byteLength-off);
-  var x=0,y=0,src=bytes;
-  for(var i=off;i<view.byteLength;i++){
-    x=(x+1)&0xff;y=(y+keyBox[x])&0xff;var t=keyBox[x];keyBox[x]=keyBox[y];keyBox[y]=t;
-    audioData[i-off]=src[i]^keyBox[(keyBox[x]+keyBox[y])&0xff];
+  for(var i=0;i<256;i++){j=(j+S[i]+decKey[i%decKey.length])&0xff;var t=S[i];S[i]=S[j];S[j]=t;}
+  // XOR decrypt
+  var len=view.byteLength-audioStart;
+  var out=new Uint8Array(len);
+  var x=0,y=0;
+  for(var i=0;i<len;i++){
+    x=(x+1)&0xff;y=(y+S[x])&0xff;var t=S[x];S[x]=S[y];S[y]=t;
+    out[i]=bytes[audioStart+i]^S[(S[x]+S[y])&0xff];
   }
-  return audioData;
+  return out.length>1024?out:null; // too small = failed
 }
 
 // QMC/MGG/MFLAC (QQ Music) decryption
