@@ -663,15 +663,13 @@ body{
       <div style="display:flex;gap:8px;align-items:center">
         <button class="pg-btn" id="audioEditorPlay" style="flex-shrink:0">▶</button>
         <span id="audioEditorTime" style="font-size:12px;color:var(--text-muted);font-family:monospace;min-width:105px">00:00 / 00:00</span>
-        <input type="range" id="audioEditorSeek" min="0" max="100" value="0" step="0.05" style="flex:1;accent-color:var(--primary);cursor:pointer;min-width:60px">
       </div>
-      <audio id="audioEditorAudio" style="display:none"></audio>
       <canvas id="audioEditorWave" width="900" height="160" style="width:100%;height:160px;border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;cursor:crosshair"></canvas>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" id="audioEditorCut" style="flex:1">✂️ 添加剪切片段</button>
       </div>
       <div class="merge-list" id="audioEditorSegments"></div>
-      <div style="font-size:12px;color:var(--text-muted)">💡 点击波形设置起点，Shift+点击设置终点，然后点「添加剪切片段」。拖拽进度条或点击波形可定位播放位置，播放时自动跳过裁剪区域。</div>
+      <div style="font-size:12px;color:var(--text-muted)">💡 点击波形设置起点并定位，Shift+点击设置终点并定位，然后点「添加剪切片段」。播放时波形上显示当前位置，自动跳过裁剪区域。</div>
     </div>
     <div class="actions" style="margin-top:8px">
       <button class="btn btn-primary" id="audioEditorExport" disabled>
@@ -695,8 +693,9 @@ body{
         <select id="audioSpeedRate" style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit">
           <option value="0.5">0.5x（慢放）</option>
           <option value="0.75">0.75x（略慢）</option>
+          <option value="1.0" selected>1.0x（正常）</option>
           <option value="1.25">1.25x（略快）</option>
-          <option value="1.5" selected>1.5x（快放）</option>
+          <option value="1.5">1.5x（快放）</option>
           <option value="2.0">2.0x（倍速）</option>
         </select>
         <span style="font-size:11px;color:var(--text-muted)">保持音调不变 · 上方播放器跟随倍速</span>
@@ -2767,7 +2766,7 @@ document.querySelector('#audioSpeedRate').addEventListener('change',function(){
 });
 
 // ==================== AUDIO EDITOR TAB ====================
-var audioEditorFile=null,_editorCtx=null,_editorWaveData=null,_editorStart=null,_editorEnd=null,_editorSegments=[],_editorAudioBuffer=null,_editorPlaying=false,_editorSource=null;
+var audioEditorFile=null,_editorCtx=null,_editorWaveData=null,_editorStart=null,_editorEnd=null,_editorSegments=[],_editorAudioBuffer=null,_editorPlaying=false,_editorSource=null,_editorSeekPos=0;
 
 function initAudioEditorCtx(){
   if(!_editorCtx)try{_editorCtx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}
@@ -2816,6 +2815,15 @@ function drawWaveform(){
     var mx=_editorEnd/dur*w;ctx.strokeStyle='#EF4444';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(mx,0);ctx.lineTo(mx,h);ctx.stroke();
     ctx.fillStyle='#EF4444';ctx.beginPath();ctx.arc(mx,10,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText('E',mx,14);
   }
+  // Draw playhead cursor
+  if(_editorSeekPos>0||_editorPlaying){
+    var px=(_editorSeekPos/dur)*w;
+    ctx.strokeStyle='#F59E0B';ctx.lineWidth=2;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,h);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#F59E0B';ctx.beginPath();ctx.arc(px,h-10,6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#1E293B';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.fillText('▶',px,h-7);
+  }
 }
 
 function timeFromWaveX(x){
@@ -2823,12 +2831,17 @@ function timeFromWaveX(x){
   return(x/cvs.offsetWidth)*_editorAudioBuffer.duration;
 }
 
-// Waveform click handlers
+// Waveform click handlers — set markers + seek
 document.querySelector('#audioEditorWave').addEventListener('click',function(e){
   if(!_editorAudioBuffer)return;
   var rect=this.getBoundingClientRect(),x=e.clientX-rect.left,t=timeFromWaveX(x);
-  if(e.shiftKey){_editorEnd=Math.max(0,Math.min(t,_editorAudioBuffer.duration));}
-  else{_editorStart=Math.max(0,Math.min(t,_editorAudioBuffer.duration));if(_editorEnd!==null&&_editorStart>_editorEnd)_editorEnd=null;}
+  t=Math.max(0,Math.min(t,_editorAudioBuffer.duration));
+  if(e.shiftKey){_editorEnd=t;}
+  else{_editorStart=t;if(_editorEnd!==null&&_editorStart>_editorEnd)_editorEnd=null;}
+  // Also seek to clicked position
+  if(_editorPlaying)stopEditorPreview();
+  _editorSeekPos=t;
+  updateEditorTimeDisplay();
   drawWaveform();
 });
 // Drag markers
@@ -2859,9 +2872,6 @@ function refreshAudioEditorUI(){
   }else if(!_editorPlaying){
     updateEditorTimeDisplay();
   }
-  // Set seek bar range
-  var seekBar=document.querySelector('#audioEditorSeek');
-  if(seekBar&&_editorAudioBuffer){seekBar.max=_editorAudioBuffer.duration;}
   drawWaveform();
   // Render segments list
   var list=document.querySelector('#audioEditorSegments');list.innerHTML='';
@@ -2906,7 +2916,7 @@ document.querySelector('#audioEditorPlay').addEventListener('click',function(){
   var keep=_editorCalcKeep();
   if(!keep.length){toast('没有可预览的片段',true);return;}
 
-  var seekFrom=parseFloat(document.querySelector('#audioEditorSeek').value)||0;
+  var seekFrom=_editorSeekPos||0;
   // Find start region: if seek falls in a cut, jump forward to next keep
   var startIdx=-1,startOff=0;
   for(var i=0;i<keep.length;i++){
@@ -2944,7 +2954,6 @@ function _startSeekTick(){
     var ctx=_editorPlayCtx;
     if(!ctx){_editorSeekAnim=null;return;}
     var elapsed=ctx.currentTime-_editorPlayStart;
-    // Walk through keep regions to find position
     var pos=elapsed,keep=_editorPlayKeep;
     if(keep){
       for(var i=_editorPlayStartIdx;i<keep.length;i++){
@@ -2954,25 +2963,16 @@ function _startSeekTick(){
         if(i===keep.length-1){pos=keep[i][1];}
       }
     }
-    var seekBar=document.querySelector('#audioEditorSeek');
-    if(seekBar&&!_seekDragging)seekBar.value=Math.min(pos,_editorAudioBuffer.duration||100);
+    _editorSeekPos=Math.min(pos,_editorAudioBuffer.duration||100);
     updateEditorTimeDisplay();
+    drawWaveform();
     _editorSeekAnim=requestAnimationFrame(tick);
   }
   _editorSeekAnim=requestAnimationFrame(tick);
 }
 
-var _seekDragging=false;
-document.querySelector('#audioEditorSeek').addEventListener('input',function(){
-  if(_editorPlaying)stopEditorPreview();
-  updateEditorTimeDisplay();
-});
-document.querySelector('#audioEditorSeek').addEventListener('mousedown',function(){_seekDragging=true;});
-document.querySelector('#audioEditorSeek').addEventListener('mouseup',function(){_seekDragging=false;});
-
 function updateEditorTimeDisplay(){
-  var seekBar=document.querySelector('#audioEditorSeek');
-  var pos=seekBar?parseFloat(seekBar.value):0;
+  var pos=_editorSeekPos||0;
   var dur=(_editorAudioBuffer&&_editorAudioBuffer.duration)||0;
   var timeEl=document.querySelector('#audioEditorTime');
   if(timeEl)timeEl.textContent=formatTime(pos)+' / '+formatTime(dur);
