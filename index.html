@@ -2510,14 +2510,24 @@ async function decryptNCM(bytes){
   var encHex=Array.from(encKey.slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
   var ncmAesKey=new Uint8Array([0x68,0x7A,0x48,0x52,0x41,0x6D,0x73,0x6F,0x35,0x6B,0x49,0x6E,0x62,0x61,0x78,0x57]);
   var decKey=aes128EcbDecrypt(ncmAesKey,encKey);
+  // Try nearby offsets: RC4 needs EXACT alignment — being off by 1 byte corrupts everything
+  var bestOff=audioStart;
+  for(var tryOff=Math.max(0,audioStart-16);tryOff<=audioStart+16;tryOff++){
+    if(tryOff+16>view.byteLength)continue;
+    var testS=new Uint8Array(256);for(var i=0;i<256;i++)testS[i]=i;
+    var tj=0;for(var i=0;i<256;i++){tj=(tj+testS[i]+decKey[i%decKey.length])&0xff;var tt=testS[i];testS[i]=testS[tj];testS[tj]=tt;}
+    var tx=0,ty=0,testOut=new Uint8Array(16);
+    for(var i=0;i<16;i++){tx=(tx+1)&0xff;ty=(ty+testS[tx])&0xff;tt=testS[tx];testS[tx]=testS[ty];testS[ty]=tt;testOut[i]=bytes[tryOff+i]^testS[(testS[tx]+testS[ty])&0xff];}
+    if((testOut[0]===0xFF&&(testOut[1]&0xE0)===0xE0)||(testOut[0]===0x49&&testOut[1]===0x44&&testOut[2]===0x33)||(testOut[0]===0x66&&testOut[1]===0x4C&&testOut[2]===0x61&&testOut[3]===0x43)){bestOff=tryOff;break;}
+  }
+  audioStart=bestOff;
   var decHex=Array.from(decKey.slice(0,4)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
-  status('AES:'+(_aesUsed||'?')+' keyLen='+keyLen+' enc='+encHex+' dec='+decHex+' off='+audioStart);
-  // RC4 KSA
+  status('AES:'+(_aesUsed||'?')+' keyLen='+keyLen+' enc='+encHex+' dec='+decHex+' off='+audioStart+(audioStart!==off?' (was '+off+')':''));
+  // RC4 KSA + PRGA with correct offset
   var S=new Uint8Array(256);
   for(var i=0;i<256;i++)S[i]=i;
   var j=0;
   for(var i=0;i<256;i++){j=(j+S[i]+decKey[i%decKey.length])&0xff;var t=S[i];S[i]=S[j];S[j]=t;}
-  // XOR decrypt
   var len=view.byteLength-audioStart;
   var out=new Uint8Array(len);
   var x=0,y=0;
