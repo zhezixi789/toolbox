@@ -23,7 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" onerror="console.warn('PDF.js CDN failed')"></script>
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="console.warn('JSZip CDN failed')"></script>
-<script async src="https://cdn.jsdelivr.net/npm/aes-js@3.1.2/index.min.js" onerror="console.warn('aes-js CDN failed')"></script>
+<script src="https://cdn.jsdelivr.net/npm/aes-js@3.1.2/index.min.js"></script>
 <script async src="./ffmpeg.js" onerror="console.warn('FFmpeg CDN failed')"></script>
 <style>
 :root {
@@ -2521,7 +2521,13 @@ async function decryptNCM(bytes){
     x=(x+1)&0xff;y=(y+S[x])&0xff;var t=S[x];S[x]=S[y];S[y]=t;
     out[i]=bytes[audioStart+i]^S[(S[x]+S[y])&0xff];
   }
-  return out.length>1024?out:null; // too small = failed
+  // Debug: show first bytes
+  if(out.length>16){
+    var hex=Array.from(out.slice(0,8)).map(function(b){return b.toString(16).padStart(2,'0');}).join(' ');
+    console.log('NCM decrypted, first bytes:',hex);
+    status('NCM解密: '+out.length+'字节, 头部: '+hex);
+  }
+  return out.length>1024?out:null;
 }
 
 // QMC/MGG/MFLAC (QQ Music) decryption
