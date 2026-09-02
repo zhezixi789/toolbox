@@ -48,7 +48,11 @@ body.no-scroll{overflow:hidden}
 .brand .badge{font-size:11px;font-weight:600;color:#fff;background:var(--primary);padding:2px 8px;border-radius:999px}
 .brand .sub{font-size:12px;color:#54718F;margin-top:4px}
 
-/* 右上角月份切换 */
+/* 右上角：保存按钮 + 月份切换 */
+.topbar-right{display:flex;align-items:center;gap:10px}
+.btn-save{background:var(--success);color:#fff;padding:9px 16px;font-size:14px}
+.btn-save:hover{background:#0EA371}
+.btn-save.has-unsaved{background:#F59E0B}
 .month-nav{position:relative;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:4px;flex-shrink:0}
 .nav-btn{width:32px;height:32px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:17px;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;transition:all .12s}
 .nav-btn:hover{background:#EDF3FA;color:var(--text)}
@@ -145,7 +149,7 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
 @media (max-width:640px){
   .brand h1{font-size:17px}
   .topbar{flex-direction:column}
-  .month-nav{align-self:flex-end}
+  .topbar-right{align-self:flex-end;flex-wrap:wrap;justify-content:flex-end}
   .save-hint{display:none}
   .modal-overlay{padding:10px}
   .modal-body{padding:10px}
@@ -175,7 +179,9 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
       <h1>📋 考勤管理 <span class="badge">月度汇总</span></h1>
       <div class="sub">打卡异常 · 假勤统计 · 日报提交 一站式汇总（点击成员姓名可查看个人月度明细）</div>
     </div>
-    <div class="month-nav" id="monthNav">
+    <div class="topbar-right">
+      <button class="btn btn-save" id="saveBtn" title="保存到本机浏览器（Ctrl/Cmd+S）">💾 保存</button>
+      <div class="month-nav" id="monthNav">
       <button class="nav-btn" id="prevBtn" title="上个月" aria-label="上个月">‹</button>
       <div class="month-label" id="monthLabel" title="点击选择月份">
         <span id="monthText">2026年9月</span><span class="cal-ico">📅</span>
@@ -193,6 +199,7 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
           <button class="cal-today-btn" id="calToday">回到本月</button>
         </div>
       </div>
+      </div>
     </div>
   </header>
 
@@ -201,7 +208,7 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
     <button class="btn btn-ghost" id="exportBtn">⬇ 导出 CSV</button>
     <button class="btn btn-ghost" id="exportXlsBtn">📊 导出 Excel</button>
     <button class="btn btn-ghost" id="exportPdfBtn">📄 导出 PDF</button>
-    <span class="save-hint" id="saveHint">数据仅保存在本机浏览器，无需联网</span>
+    <span class="save-hint" id="saveHint">修改后点右上角「保存」才会写入本机</span>
   </div>
 
   <div class="card">
@@ -230,7 +237,7 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
         <tbody id="tbody"></tbody>
       </table>
     </div>
-    <div class="table-foot">💾 数据自动保存在本机浏览器（localStorage），关闭页面不丢失；每月数据独立存储，右上角日历可切换月份。点击成员姓名弹出其个人月度明细（纵轴年月、横轴与本表一致）。删除成员会清空其在所有月份的数据。</div>
+    <div class="table-foot">💾 修改后请点击右上角「保存」才会写入本机浏览器；不保存关闭页面将丢失本次修改，再次打开为上次保存的状态。每月数据独立存储，右上角日历可切换月份。点击成员姓名弹出其个人月度明细（纵轴年月、横轴与本表一致）。删除成员会清空其在所有月份的数据。</div>
   </div>
 </div>
 
@@ -273,20 +280,74 @@ var cur={y:today.getFullYear(), m:today.getMonth()+1};
 var calViewY=cur.y; // 日历弹层中展示的年份
 
 var roster=loadJSON(LS_ROSTER, []);
-var monthData={};
+var drafts={};           // 内存草稿：monthKey -> 该月数据（保存前只改内存，不写 localStorage）
+var dirtyMonths={};      // monthKey -> true，有未保存修改
+var rosterDirty=false;   // 成员名单有未保存修改
+var pendingRemovals=[];  // 保存时才执行清理的已删除成员
+var monthData={};        // 当前月数据引用（指向 drafts）
 
-function loadMonth(){ monthData=loadJSON(monthKey(cur.y,cur.m), {}); }
-function persistMonth(){ saveJSON(monthKey(cur.y,cur.m), monthData); }
-function persistRoster(){ saveJSON(LS_ROSTER, roster); }
+var HINT_IDLE='修改后点右上角「保存」才会写入本机';
+
+function getDraft(y,m){
+  var k=monthKey(y,m);
+  if(!drafts[k]) drafts[k]=loadJSON(k, {})||{};
+  return drafts[k];
+}
+function loadMonth(){ monthData=getDraft(cur.y,cur.m); }
+function hasUnsaved(){ return Object.keys(dirtyMonths).length>0 || rosterDirty || pendingRemovals.length>0; }
+function updateSaveState(){
+  var has=hasUnsaved();
+  $('saveHint').textContent= has ? '⚠ 有未保存的修改，请点击右上角「保存」' : HINT_IDLE;
+  $('saveBtn').classList.toggle('has-unsaved', has);
+}
+function markDirty(y,m){
+  if(y!==undefined) dirtyMonths[monthKey(y,m)]=true;
+  updateSaveState();
+}
+function clearDirty(){ $('saveBtn').classList.remove('has-unsaved'); }
 
 /* ---------- 保存提示 ---------- */
 var hintTimer=null;
 function flashSaved(){
   var el=$('saveHint');
-  el.textContent='已自动保存 '+new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  el.textContent='已保存 '+new Date().toLocaleTimeString('zh-CN',{hour12:false});
   clearTimeout(hintTimer);
-  hintTimer=setTimeout(function(){ el.textContent='数据仅保存在本机浏览器，无需联网'; },3000);
+  hintTimer=setTimeout(function(){ el.textContent=HINT_IDLE; },3000);
 }
+
+/* ---------- 保存到本机（点右上角「保存」才写入 localStorage） ---------- */
+function saveNow(){
+  /* 写入所有有修改的月份 */
+  Object.keys(dirtyMonths).forEach(function(k){
+    var d=drafts[k];
+    if(d && Object.keys(d).length) saveJSON(k, d); else localStorage.removeItem(k);
+  });
+  dirtyMonths={};
+  /* 成员名单 */
+  if(rosterDirty){ saveJSON(LS_ROSTER, roster); rosterDirty=false; }
+  /* 被删除成员的跨月清理（含未打开过的月份） */
+  pendingRemovals.forEach(function(nm){
+    Object.keys(localStorage).forEach(function(k){
+      if(/^kq:\d{4}-\d{2}$/.test(k)){
+        var d=loadJSON(k, null);
+        if(d && d[nm]!==undefined){
+          delete d[nm];
+          if(Object.keys(d).length) saveJSON(k,d); else localStorage.removeItem(k);
+        }
+      }
+    });
+  });
+  pendingRemovals=[];
+  clearDirty();
+  flashSaved();
+}
+$('saveBtn').addEventListener('click', saveNow);
+document.addEventListener('keydown', function(ev){
+  if((ev.ctrlKey||ev.metaKey)&&(ev.key==='s'||ev.key==='S')){ ev.preventDefault(); saveNow(); }
+});
+window.addEventListener('beforeunload', function(ev){
+  if(hasUnsaved()){ ev.preventDefault(); ev.returnValue=''; }
+});
 
 /* ---------- 键盘导航（方向键在格子间移动，Enter 跳到下一行同列） ---------- */
 function bindGridNav(inp, getTrs, rowIdx, colIdx){
@@ -360,8 +421,7 @@ function renderTable(){
       var inp=buildInput(col, rec[col.key], function(){
         var d=monthData[name]||(monthData[name]={});
         d[col.key]=inp.value;      // 空字符串 = 未填写
-        persistMonth();
-        flashSaved();
+        markDirty(cur.y, cur.m);
       }, ri, ci, function(){ return tbody.querySelectorAll('tr'); });
       td.appendChild(inp);
       tr.appendChild(td);
@@ -379,6 +439,11 @@ function renderTable(){
 function collectYears(){
   var map={};
   Object.keys(localStorage).forEach(function(k){
+    var m=k.match(/^kq:(\d{4})-(\d{2})$/);
+    if(m) map[+m[1]]=true;
+  });
+  /* 内存草稿里的年份也算（未保存的新月份） */
+  Object.keys(drafts).forEach(function(k){
     var m=k.match(/^kq:(\d{4})-(\d{2})$/);
     if(m) map[+m[1]]=true;
   });
@@ -469,7 +534,7 @@ function renderDetailTable(name){
     /* 该年份 1-12 月全部列出 */
     for(var m=1;m<=12;m++){
       (function(mo){
-        var d=loadJSON(monthKey(y,mo), {})||{};
+        var d=getDraft(y,mo);
         var rec=d[name]||{};
         var tr=document.createElement('tr');
         tr.className='detail-month-row';
@@ -487,17 +552,16 @@ function renderDetailTable(name){
           var dcol=(col.key==='note') ? {key:'dnote', label:'备注', type:'text'} : col;
           var td=document.createElement('td');
           var inp=buildInput(dcol, rec[dcol.key], function(){
-            var dm=loadJSON(monthKey(y,mo), {})||{};
+            var dm=getDraft(y,mo);
             var pr=dm[name]||(dm[name]={});
             pr[dcol.key]=inp.value;
-            saveJSON(monthKey(y,mo), dm);
+            markDirty(y, mo);
             /* 若编辑的是汇总表当前月份，同步刷新汇总表 */
             if(y===cur.y && mo===cur.m){
               monthData=dm;
               renderTable();
             }
             updateDetailTotals(name);
-            flashSaved();
           }, ri, ci, getTrs);
           td.appendChild(inp);
           tr.appendChild(td);
@@ -518,7 +582,7 @@ function updateDetailTotals(name){
   NUM_KEYS.forEach(function(k){ sums[k]=0; });
   collectYears().forEach(function(y){
     for(var m=1;m<=12;m++){
-      var d=loadJSON(monthKey(y,m), {})||{};
+      var d=getDraft(y,m);
       var rec=d[name]||{};
       NUM_KEYS.forEach(function(k){
         var v=parseFloat(rec[k]);
@@ -608,9 +672,13 @@ $('addBtn').addEventListener('click', function(){
     if(roster.indexOf(n)>-1) dup.push(n);
     else { roster.push(n); added.push(n); }
   });
-  persistRoster();
+  if(added.length){
+    rosterDirty=true;
+    /* 若该名字此前被删除待清理，撤销清理 */
+    pendingRemovals=pendingRemovals.filter(function(n){ return added.indexOf(n)<0; });
+  }
   renderTable();
-  if(added.length) flashSaved();
+  if(added.length) updateSaveState();
   var msg='';
   if(added.length) msg+='已添加：'+added.join('、')+'（'+added.length+' 人）';
   if(dup.length) msg+=(msg?'\n':'')+'已存在，跳过：'+dup.join('、');
@@ -623,21 +691,17 @@ $('addBtn').addEventListener('click', function(){
   }
 });
 function removePerson(name){
-  if(!confirm('确定删除「'+name+'」吗？\n删除后将同时清空该成员在所有月份的数据。')) return;
+  if(!confirm('确定删除「'+name+'」吗？\n删除后将同时清空该成员在所有月份的数据（保存后生效）。')) return;
   roster=roster.filter(function(n){ return n!==name; });
-  persistRoster();
-  /* 清理所有月份中该成员的数据 */
-  Object.keys(localStorage).forEach(function(k){
-    if(/^kq:\d{4}-\d{2}$/.test(k)){
-      var d=loadJSON(k, null);
-      if(d && d[name]!==undefined){
-        delete d[name];
-        if(Object.keys(d).length) saveJSON(k,d); else localStorage.removeItem(k);
-      }
-    }
+  rosterDirty=true;
+  if(pendingRemovals.indexOf(name)<0) pendingRemovals.push(name);
+  /* 立即从内存草稿中移除该成员 */
+  Object.keys(drafts).forEach(function(k){
+    var d=drafts[k];
+    if(d && d[name]!==undefined){ delete d[name]; dirtyMonths[k]=true; }
   });
   renderTable();
-  flashSaved();
+  updateSaveState();
 }
 
 /* ================= 导出 CSV（带 BOM，Excel 可直接打开） ================= */
