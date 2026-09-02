@@ -674,38 +674,141 @@ function xmlEsc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-/* ---------- 导出 Excel（SpreadsheetML 格式，无需联网，Excel/WPS 可直接打开） ---------- */
-$('exportXlsBtn').addEventListener('click', function(){
-  var rows=[];
+/* ---------- 导出 Excel（生成标准 .xlsx 文件，纯本地、无需联网，Excel/WPS/Numbers 均可打开） ---------- */
+/* XLSX-START */
+var txtEnc=new TextEncoder();
+function utf8Bytes(s){ return txtEnc.encode(s); }
+function colLetter(n){
+  var s='';
+  while(n>0){ var r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
+  return s;
+}
+function makeCrcTable(){
+  var t=new Uint32Array(256);
+  for(var n=0;n<256;n++){
+    var c=n;
+    for(var k=0;k<8;k++){ c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); }
+    t[n]=c>>>0;
+  }
+  return t;
+}
+var CRC_TABLE=makeCrcTable();
+function crc32(bytes){
+  var c=0xFFFFFFFF;
+  for(var i=0;i<bytes.length;i++){ c=(c>>>8)^CRC_TABLE[(c^bytes[i])&0xFF]; }
+  return (c^0xFFFFFFFF)>>>0;
+}
+function zipStore(files){
+  var u16=function(v){ return [v&255,(v>>8)&255]; };
+  var u32=function(v){ return [v&255,(v>>8)&255,(v>>16)&255,(v>>24)&255]; };
+  var now=new Date();
+  var dosTime=(now.getHours()<<11)|(now.getMinutes()<<5)|(Math.floor(now.getSeconds()/2));
+  var dosDate=((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
+  var chunks=[], central=[], offset=0;
+  files.forEach(function(f){
+    var nb=utf8Bytes(f.name);
+    var crc=crc32(f.data);
+    var local=new Uint8Array([].concat(
+      [0x50,0x4B,0x03,0x04], u16(20), u16(0x800), u16(0), u16(dosTime), u16(dosDate),
+      u32(crc), u32(f.data.length), u32(f.data.length), u16(nb.length), u16(0)));
+    var cd=new Uint8Array([].concat(
+      [0x50,0x4B,0x01,0x02], u16(20), u16(20), u16(0x800), u16(0), u16(dosTime), u16(dosDate),
+      u32(crc), u32(f.data.length), u32(f.data.length), u16(nb.length),
+      u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset)));
+    chunks.push(local, nb, f.data);
+    central.push(cd, nb);
+    offset += local.length + nb.length + f.data.length;
+  });
+  var cdLen=0;
+  central.forEach(function(c){ cdLen+=c.length; });
+  var eocd=new Uint8Array([].concat(
+    [0x50,0x4B,0x05,0x06], u16(0), u16(0), u16(files.length), u16(files.length),
+    u32(cdLen), u32(offset), u16(0)));
+  var out=new Uint8Array(offset+cdLen+eocd.length);
+  var p=0;
+  chunks.forEach(function(c){ out.set(c,p); p+=c.length; });
+  central.forEach(function(c){ out.set(c,p); p+=c.length; });
+  out.set(eocd,p);
+  return out;
+}
+function buildSheetXml(rows){
+  var widths=[12].concat(COLS.map(function(c){ return c.type==='text'?30:10; }));
+  var xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>';
+  widths.forEach(function(w,i){ xml+='<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>'; });
+  xml+='</cols><sheetData>';
+  rows.forEach(function(r,ri){
+    xml+='<row r="'+(ri+1)+'">';
+    r.forEach(function(v,ci){
+      if(v===''||v===undefined||v===null) return;
+      var ref=colLetter(ci+1)+(ri+1);
+      var isNum=(ci>0 && COLS[ci-1].type!=='text' && !isNaN(parseFloat(v)));
+      if(ri===0){
+        xml+='<c r="'+ref+'" s="1" t="inlineStr"><is><t>'+xmlEsc(v)+'</t></is></c>';
+      }else if(isNum){
+        xml+='<c r="'+ref+'"><v>'+parseFloat(v)+'</v></c>';
+      }else{
+        xml+='<c r="'+ref+'" t="inlineStr"><is><t>'+xmlEsc(v)+'</t></is></c>';
+      }
+    });
+    xml+='</row>';
+  });
+  xml+='</sheetData></worksheet>';
+  return utf8Bytes(xml);
+}
+function xlsxBytes(){
   var head=['姓名'].concat(COLS.map(function(c){ return c.label; }));
-  rows.push(head);
+  var rows=[head];
   roster.forEach(function(name){
     var rec=monthData[name]||{};
     rows.push([name].concat(COLS.map(function(c){
       var v=rec[c.key];
-      return (v===undefined||v===null)?'':v;
+      return (v===undefined||v===null)?'':String(v);
     })));
   });
-  var xml='<?xml version="1.0" encoding="UTF-8"?>\n'+
-    '<?mso-application progid="Excel.Sheet"?>\n'+
-    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+
-    '<Styles><Style ss:ID="h"><Font ss:Bold="1"/><Interior ss:Color="#DCE6F5" ss:Pattern="Solid"/></Style></Styles>'+
-    '<Worksheet ss:Name="'+xmlEsc(cur.y+'年'+cur.m+'月')+'"><Table>';
-  xml+='<Column ss:Width="90"/>';
-  COLS.forEach(function(c){ xml+='<Column ss:Width="'+(c.type==='text'?200:70)+'"/>'; });
-  rows.forEach(function(r,ri){
-    xml+='<Row>';
-    r.forEach(function(v){
-      var isNum = (typeof v==='string' && v!=='' && !isNaN(parseFloat(v)) && isFinite(v));
-      if(v===''){ xml+='<Cell'+(ri===0?' ss:StyleID="h"':'')+'></Cell>'; }
-      else if(isNum){ xml+='<Cell><Data ss:Type="Number">'+parseFloat(v)+'</Data></Cell>'; }
-      else { xml+='<Cell'+(ri===0?' ss:StyleID="h"':'')+'><Data ss:Type="String">'+xmlEsc(v)+'</Data></Cell>'; }
-    });
-    xml+='</Row>';
-  });
-  xml+='</Table></Worksheet></Workbook>';
-  var blob=new Blob(['﻿'+xml], {type:'application/vnd.ms-excel;charset=utf-8'});
-  downloadBlob(blob, '考勤汇总-'+cur.y+'年'+cur.m+'月.xls');
+  var files=[
+    {name:'[Content_Types].xml', data:utf8Bytes(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+      '<Default Extension="xml" ContentType="application/xml"/>'+
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'+
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+
+      '</Types>')},
+    {name:'_rels/.rels', data:utf8Bytes(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'+
+      '</Relationships>')},
+    {name:'xl/workbook.xml', data:utf8Bytes(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'+
+      '<sheets><sheet name="'+xmlEsc(cur.y+'年'+cur.m+'月')+'" sheetId="1" r:id="rId1"/></sheets>'+
+      '</workbook>')},
+    {name:'xl/_rels/workbook.xml.rels', data:utf8Bytes(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'+
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'+
+      '</Relationships>')},
+    {name:'xl/styles.xml', data:utf8Bytes(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+      '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'+
+      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDCE6F5"/><bgColor indexed="64"/></patternFill></fill></fills>'+
+      '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'+
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+      '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>'+
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'+
+      '</styleSheet>')},
+    {name:'xl/worksheets/sheet1.xml', data:buildSheetXml(rows)}
+  ];
+  return zipStore(files);
+}
+/* XLSX-END */
+$('exportXlsBtn').addEventListener('click', function(){
+  downloadBlob(new Blob([xlsxBytes()], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), '考勤汇总-'+cur.y+'年'+cur.m+'月.xlsx');
 });
 
 /* ---------- 导出 PDF（调用浏览器打印 → 另存为 PDF，无需联网） ---------- */
