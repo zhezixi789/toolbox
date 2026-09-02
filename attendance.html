@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>考勤管理 · 月度汇总</title>
+<style>
+:root{
+  --primary:#3B82F6;
+  --primary-hover:#2563EB;
+  --primary-light:#EFF6FF;
+  --danger:#EF4444;
+  --danger-light:#FEF2F2;
+  --success:#10B981;
+  --bg:#F8FAFC;
+  --surface:#FFFFFF;
+  --border:#E2E8F0;
+  --text:#1E293B;
+  --text-secondary:#64748B;
+  --text-muted:#94A3B8;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 8px 24px rgba(0,0,0,.12);
+  --radius:12px;
+  --radius-sm:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;
+  padding:24px 16px 60px;
+}
+.app{max-width:1240px;margin:0 auto}
+
+/* ---------- 顶栏 ---------- */
+.topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.brand h1{font-size:20px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.brand .badge{font-size:11px;font-weight:600;color:var(--primary);background:var(--primary-light);border:1px solid #BFDBFE;padding:2px 8px;border-radius:999px}
+.brand .sub{font-size:12px;color:var(--text-muted);margin-top:4px}
+
+/* 右上角月份切换 */
+.month-nav{position:relative;display:flex;align-items:center;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:4px;flex-shrink:0}
+.nav-btn{width:32px;height:32px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:17px;color:var(--text-secondary);display:flex;align-items:center;justify-content:center;transition:all .12s}
+.nav-btn:hover{background:var(--bg);color:var(--text)}
+.month-label{min-width:120px;text-align:center;font-weight:600;font-size:14px;cursor:pointer;padding:6px 6px;border-radius:8px;user-select:none;display:flex;align-items:center;justify-content:center;gap:6px;transition:background .12s}
+.month-label:hover{background:var(--bg)}
+.month-label .cal-ico{font-size:13px}
+
+/* 日历弹层 */
+.cal-pop{position:absolute;top:calc(100% + 8px);right:0;width:304px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-md);padding:14px;z-index:100}
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.cal-year{font-weight:700;font-size:14px}
+.cal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.cal-month{padding:9px 0;border:1px solid transparent;border-radius:8px;background:var(--bg);cursor:pointer;font-size:13px;color:var(--text-secondary);transition:all .12s}
+.cal-month:hover{border-color:var(--primary);color:var(--primary)}
+.cal-month.selected{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+.cal-month.today{border-color:var(--primary);border-style:dashed}
+.cal-foot{margin-top:10px;display:flex;justify-content:space-between;align-items:center}
+.cal-today-btn{font-size:12px;color:var(--primary);background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:6px}
+.cal-today-btn:hover{background:var(--primary-light)}
+.hidden{display:none}
+
+/* ---------- 工具栏 ---------- */
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:all .12s;font-family:inherit}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-hover)}
+.btn-ghost{background:var(--surface);border-color:var(--border);color:var(--text-secondary)}
+.btn-ghost:hover{background:var(--bg);color:var(--text)}
+.save-hint{margin-left:auto;font-size:12px;color:var(--text-muted)}
+
+/* ---------- 表格 ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.table-wrap{overflow:auto;max-height:calc(100vh - 290px)}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;min-width:1180px}
+th,td{padding:0;text-align:center;border-bottom:1px solid var(--border)}
+thead th{background:#F1F5F9;font-weight:600;color:var(--text-secondary);padding:8px 6px;white-space:nowrap;position:sticky;top:0;z-index:3}
+thead th.name-col{left:0;z-index:4}
+.group-row th{background:#E2E8F0;color:var(--text-secondary);font-size:12px;padding:6px;border-bottom:1px solid var(--border)}
+.col-row th{font-size:12.5px}
+.unit{font-size:10px;color:var(--text-muted);font-weight:400;margin-left:1px}
+th.name-col,td.name-col{position:sticky;left:0;text-align:left}
+td.name-col{background:var(--surface)}
+.name-cell{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 10px;min-height:38px;font-weight:500}
+.name-cell span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.del-btn{width:20px;height:20px;flex-shrink:0;border:none;background:transparent;color:var(--text-muted);border-radius:6px;cursor:pointer;font-size:11px;opacity:0;transition:all .12s;display:flex;align-items:center;justify-content:center}
+tr:hover .del-btn{opacity:1}
+.del-btn:hover{background:var(--danger-light);color:var(--danger)}
+td input{width:100%;border:none;background:transparent;text-align:center;padding:9px 6px;font-size:13px;color:var(--text);outline:none;font-family:inherit;font-variant-numeric:tabular-nums;min-height:38px}
+td input:focus{background:var(--primary-light);box-shadow:inset 0 0 0 2px var(--primary)}
+td .note-input{text-align:left;font-variant-numeric:normal}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+tbody tr:hover td{background:#F4F8FC}
+tbody tr:hover td.name-col{background:#F4F8FC}
+td.empty{height:140px;color:var(--text-muted);padding:24px}
+th.act-col,td.act-col{width:14px;min-width:14px;padding:0}
+th.note-col,td.note-col{min-width:200px}
+th.name-col,td.name-col{min-width:140px}
+/* 合计行 */
+tfoot td{background:#F8FAFC;font-weight:600;border-top:2px solid var(--border);border-bottom:none;padding:10px 6px;font-variant-numeric:tabular-nums}
+tfoot td.name-col{background:#F8FAFC}
+tfoot .total-label{font-weight:700;padding-left:10px}
+/* 表尾提示 */
+.table-foot{padding:10px 16px;font-size:12px;color:var(--text-muted);border-top:1px solid var(--border);background:#FAFBFC}
+@media (max-width:640px){
+  .brand h1{font-size:17px}
+  .topbar{flex-direction:column}
+  .month-nav{align-self:flex-end;margin-top:-44px}
+  .save-hint{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>📋 考勤管理 <span class="badge">月度汇总</span></h1>
+      <div class="sub">打卡异常 · 假勤统计 · 日报提交 一站式汇总</div>
+    </div>
+    <div class="month-nav" id="monthNav">
+      <button class="nav-btn" id="prevBtn" title="上个月" aria-label="上个月">‹</button>
+      <div class="month-label" id="monthLabel" title="点击选择月份">
+        <span id="monthText">2026年9月</span><span class="cal-ico">📅</span>
+      </div>
+      <button class="nav-btn" id="nextBtn" title="下个月" aria-label="下个月">›</button>
+      <div class="cal-pop hidden" id="calPop">
+        <div class="cal-head">
+          <button class="nav-btn" id="calPrevY" aria-label="上一年">‹</button>
+          <span class="cal-year" id="calYear">2026年</span>
+          <button class="nav-btn" id="calNextY" aria-label="下一年">›</button>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-foot">
+          <span style="font-size:11px;color:var(--text-muted)">虚线框 = 本月</span>
+          <button class="cal-today-btn" id="calToday">回到本月</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <button class="btn btn-primary" id="addBtn">＋ 添加成员</button>
+    <button class="btn btn-ghost" id="exportBtn">⬇ 导出 CSV</button>
+    <span class="save-hint" id="saveHint">数据仅保存在本机浏览器，无需联网</span>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table id="sheet">
+        <thead>
+          <tr class="group-row">
+            <th class="name-col" rowspan="2">姓名</th>
+            <th colspan="3">打卡异常</th>
+            <th colspan="3">假勤统计</th>
+            <th colspan="2">日报提交</th>
+            <th rowspan="2" class="note-col">备注</th>
+            <th rowspan="2" class="act-col"></th>
+          </tr>
+          <tr class="col-row">
+            <th>补卡次数</th>
+            <th>迟到次数</th>
+            <th>缺卡次数</th>
+            <th>调休<span class="unit">天</span></th>
+            <th>病假/事假<span class="unit">天</span></th>
+            <th>加班<span class="unit">小时</span></th>
+            <th>日/周报应提交</th>
+            <th>日/周报实际提交</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+        <tfoot id="tfoot"></tfoot>
+      </table>
+    </div>
+    <div class="table-foot">💾 数据自动保存在本机浏览器（localStorage），关闭页面不丢失；每月数据独立存储，右上角日历可切换月份。删除成员会清空其在所有月份的数据。</div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+/* ---------- 配置 ---------- */
+var LS_ROSTER = 'kq-roster';                          // 成员名单（所有月份共用）
+var LS_MONTH = 'kq:';                                  // 月度数据前缀 kq:2026-09
+var COLS = [
+  {key:'buka',      label:'补卡次数',      type:'int'},
+  {key:'chidao',    label:'迟到次数',      type:'int'},
+  {key:'queka',     label:'缺卡次数',      type:'int'},
+  {key:'tiaoxiu',   label:'调休',          type:'num'},
+  {key:'leave',     label:'病假/事假',     type:'num'},
+  {key:'overtime',  label:'加班',          type:'num'},
+  {key:'due',       label:'日/周报应提交',  type:'int'},
+  {key:'submitted', label:'日/周报实际提交', type:'int'},
+  {key:'note',      label:'备注',          type:'text'}
+];
+var NUM_KEYS = COLS.filter(function(c){return c.type!=='text';}).map(function(c){return c.key;});
+var NUMERIC_COL_COUNT = 8; // 数值列数，用于计算 colspan
+
+/* ---------- 工具函数 ---------- */
+function $(id){ return document.getElementById(id); }
+function monthKey(y,m){ return LS_MONTH + y + '-' + String(m).padStart(2,'0'); }
+function loadJSON(k,fb){ try{ var v=JSON.parse(localStorage.getItem(k)); return v||fb; }catch(e){ return fb; } }
+function saveJSON(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
+
+var tbody=$('tbody'), tfoot=$('tfoot'), monthText=$('monthText'), calPop=$('calPop');
+var today=new Date();
+var cur={y:today.getFullYear(), m:today.getMonth()+1};
+var calViewY=cur.y; // 日历弹层中展示的年份
+
+var roster=loadJSON(LS_ROSTER, []);
+var monthData={};
+
+function loadMonth(){ monthData=loadJSON(monthKey(cur.y,cur.m), {}); }
+function persistMonth(){ saveJSON(monthKey(cur.y,cur.m), monthData); }
+function persistRoster(){ saveJSON(LS_ROSTER, roster); }
+
+/* ---------- 保存提示 ---------- */
+var hintTimer=null;
+function flashSaved(){
+  var el=$('saveHint');
+  el.textContent='已自动保存 '+new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  clearTimeout(hintTimer);
+  hintTimer=setTimeout(function(){ el.textContent='数据仅保存在本机浏览器，无需联网'; },3000);
+}
+
+/* ---------- 表格渲染 ---------- */
+function buildCell(col, name, rec, ri, ci){
+  var td=document.createElement('td');
+  var inp=document.createElement('input');
+  if(col.type==='text'){
+    inp.type='text'; inp.className='note-input'; inp.maxLength=200; inp.placeholder='';
+  }else{
+    inp.type='number'; inp.min='0'; inp.step=(col.type==='int')?'1':'0.5'; inp.inputMode='decimal';
+  }
+  inp.value=(rec[col.key]!==undefined && rec[col.key]!==null) ? rec[col.key] : '';
+  inp.dataset.name=name; inp.dataset.key=col.key;
+  inp.dataset.ri=ri; inp.dataset.ci=ci;
+  inp.addEventListener('input', function(){
+    var d=monthData[name]||(monthData[name]={});
+    d[col.key]=inp.value;      // 空字符串 = 未填写
+    persistMonth();
+    updateTotals();
+    flashSaved();
+  });
+  /* 键盘导航：方向键在单元格间移动，Enter 跳到下一行同列 */
+  inp.addEventListener('keydown', function(ev){
+    var k=ev.key;
+    if(k==='ArrowUp'||k==='ArrowDown'||k==='ArrowLeft'||k==='ArrowRight'||k==='Enter'){
+      var nr=+inp.dataset.ri, nc=+inp.dataset.ci;
+      if(k==='ArrowUp') nr--; else if(k==='ArrowDown'||k==='Enter') nr++;
+      else if(k==='ArrowLeft') nc--; else if(k==='ArrowRight') nc++;
+      if(ev.shiftKey && k==='Enter') nr-=2;
+      ev.preventDefault();
+      var trs=tbody.querySelectorAll('tr');
+      if(nr<0||nr>=trs.length) return;
+      var inputs=trs[nr].querySelectorAll('input');
+      if(nc<0||nc>=inputs.length) return;
+      var target=inputs[nc];
+      target.focus();
+      if(target.type==='number') target.select();
+    }
+  });
+  td.appendChild(inp);
+  return td;
+}
+
+function renderTable(){
+  tbody.innerHTML='';
+  if(roster.length===0){
+    var tr=document.createElement('tr');
+    var td=document.createElement('td');
+    td.className='empty';
+    td.colSpan=NUMERIC_COL_COUNT+3; // 姓名 + 数值列 + 备注 + 操作
+    td.innerHTML='<div style="font-size:14px;margin-bottom:6px">暂无成员</div><div style="font-size:12px">点击左上角「＋ 添加成员」开始使用</div>';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+  roster.forEach(function(name, ri){
+    var rec=monthData[name]||{};
+    var tr=document.createElement('tr');
+
+    /* 姓名列 */
+    var tdName=document.createElement('td');
+    tdName.className='name-col';
+    var div=document.createElement('div');
+    div.className='name-cell';
+    var span=document.createElement('span');
+    span.textContent=name; span.title=name;
+    var del=document.createElement('button');
+    del.className='del-btn'; del.title='删除该成员（清空所有月份数据）'; del.textContent='✕';
+    del.addEventListener('click', function(){ removePerson(name); });
+    div.appendChild(span); div.appendChild(del);
+    tdName.appendChild(div);
+    tr.appendChild(tdName);
+
+    COLS.forEach(function(col, ci){
+      tr.appendChild(buildCell(col, name, rec, ri, ci));
+    });
+
+    var tdAct=document.createElement('td');
+    tdAct.className='act-col';
+    tr.appendChild(tdAct);
+
+    tbody.appendChild(tr);
+  });
+}
+
+function fmtNum(v){
+  if(v===''||v===null||v===undefined) return '0';
+  var n=Math.round(parseFloat(v)*100)/100;
+  return isNaN(n)?'0':String(n);
+}
+function updateTotals(){
+  var sums={};
+  NUM_KEYS.forEach(function(k){ sums[k]=0; });
+  roster.forEach(function(name){
+    var rec=monthData[name]||{};
+    NUM_KEYS.forEach(function(k){
+      var v=parseFloat(rec[k]);
+      if(!isNaN(v)) sums[k]+=v;
+    });
+  });
+  tfoot.innerHTML='';
+  var tr=document.createElement('tr');
+  var td0=document.createElement('td');
+  td0.className='name-col total-label'; td0.textContent='合计';
+  tr.appendChild(td0);
+  COLS.forEach(function(col){
+    var td=document.createElement('td');
+    if(col.type!=='text') td.textContent=fmtNum(sums[col.key]);
+    tr.appendChild(td);
+  });
+  var tdAct=document.createElement('td'); tdAct.className='act-col';
+  tr.appendChild(tdAct);
+  tfoot.appendChild(tr);
+}
+
+/* ---------- 月份切换 ---------- */
+function setMonth(y,m){
+  cur={y:y,m:m};
+  loadMonth();
+  monthText.textContent=y+'年'+m+'月';
+  calViewY=y;
+  renderTable();
+  updateTotals();
+  renderCal();
+}
+$('prevBtn').addEventListener('click', function(){
+  var y=cur.y, m=cur.m-1;
+  if(m===0){ m=12; y--; }
+  setMonth(y,m);
+});
+$('nextBtn').addEventListener('click', function(){
+  var y=cur.y, m=cur.m+1;
+  if(m===13){ m=1; y++; }
+  setMonth(y,m);
+});
+
+/* ---------- 日历弹层 ---------- */
+function toggleCal(){ calPop.classList.toggle('hidden'); if(!calPop.classList.contains('hidden')) renderCal(); }
+$('monthLabel').addEventListener('click', toggleCal);
+document.addEventListener('click', function(ev){
+  if(!$('monthNav').contains(ev.target)) calPop.classList.add('hidden');
+});
+document.addEventListener('keydown', function(ev){
+  if(ev.key==='Escape') calPop.classList.add('hidden');
+});
+$('calPrevY').addEventListener('click', function(){ calViewY--; renderCal(); });
+$('calNextY').addEventListener('click', function(){ calViewY++; renderCal(); });
+$('calToday').addEventListener('click', function(){
+  setMonth(today.getFullYear(), today.getMonth()+1);
+  calPop.classList.add('hidden');
+});
+function renderCal(){
+  $('calYear').textContent=calViewY+'年';
+  var grid=$('calGrid');
+  grid.innerHTML='';
+  for(var m=1;m<=12;m++){
+    (function(mm){
+      var btn=document.createElement('button');
+      btn.className='cal-month';
+      btn.textContent=mm+'月';
+      if(mm===cur.m && calViewY===cur.y) btn.classList.add('selected');
+      if(mm===today.getMonth()+1 && calViewY===today.getFullYear()) btn.classList.add('today');
+      btn.addEventListener('click', function(){
+        setMonth(calViewY, mm);
+        calPop.classList.add('hidden');
+      });
+      grid.appendChild(btn);
+    })(m);
+  }
+}
+
+/* ---------- 成员管理 ---------- */
+$('addBtn').addEventListener('click', function(){
+  var raw=prompt('输入成员姓名（多个可用逗号、顿号或空格分隔）：');
+  if(raw===null) return;
+  var names=raw.split(/[,，、;；\s]+/).map(function(s){return s.trim().slice(0,20);}).filter(Boolean);
+  if(names.length===0) return;
+  var added=[], dup=[];
+  names.forEach(function(n){
+    if(roster.indexOf(n)>-1) dup.push(n);
+    else { roster.push(n); added.push(n); }
+  });
+  persistRoster();
+  renderTable();
+  updateTotals();
+  if(added.length) flashSaved();
+  var msg='';
+  if(added.length) msg+='已添加：'+added.join('、')+'（'+added.length+' 人）';
+  if(dup.length) msg+=(msg?'\n':'')+'已存在，跳过：'+dup.join('、');
+  if(msg) alert(msg);
+  /* 聚焦新成员第一格 */
+  if(added.length){
+    var trs=tbody.querySelectorAll('tr');
+    var tr=trs[roster.indexOf(added[0])];
+    if(tr){ var inp=tr.querySelector('input[type=number]'); if(inp){ inp.focus(); inp.select(); } }
+  }
+});
+function removePerson(name){
+  if(!confirm('确定删除「'+name+'」吗？\n删除后将同时清空该成员在所有月份的数据。')) return;
+  roster=roster.filter(function(n){ return n!==name; });
+  persistRoster();
+  /* 清理所有月份中该成员的数据 */
+  Object.keys(localStorage).forEach(function(k){
+    if(/^kq:\d{4}-\d{2}$/.test(k)){
+      var d=loadJSON(k, null);
+      if(d && d[name]!==undefined){
+        delete d[name];
+        if(Object.keys(d).length) saveJSON(k,d); else localStorage.removeItem(k);
+      }
+    }
+  });
+  renderTable();
+  updateTotals();
+  flashSaved();
+}
+
+/* ---------- 导出 CSV（带 BOM，Excel 可直接打开） ---------- */
+$('exportBtn').addEventListener('click', function(){
+  var rows=[];
+  var head=['姓名'].concat(COLS.map(function(c){ return c.label; }));
+  rows.push(head);
+  roster.forEach(function(name){
+    var rec=monthData[name]||{};
+    rows.push([name].concat(COLS.map(function(c){
+      var v=rec[c.key];
+      return (v===undefined||v===null)?'':v;
+    })));
+  });
+  var tot=['合计'];
+  NUM_KEYS.forEach(function(k){
+    var s=0;
+    roster.forEach(function(name){
+      var v=parseFloat((monthData[name]||{})[k]);
+      if(!isNaN(v)) s+=v;
+    });
+    tot.push(String(Math.round(s*100)/100));
+  });
+  tot.push('');
+  rows.push(tot);
+  var csv=rows.map(function(r){
+    return r.map(function(v){
+      v=String(v);
+      return /[",\n]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v;
+    }).join(',');
+  }).join('\r\n');
+  var blob=new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='考勤汇总-'+cur.y+'年'+cur.m+'月.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+});
+
+/* ---------- 初始化 ---------- */
+renderCal();
+setMonth(cur.y, cur.m);
+})();
+</script>
+</body>
+</html>
