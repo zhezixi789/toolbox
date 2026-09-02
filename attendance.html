@@ -121,6 +121,9 @@ th.act-col,td.act-col{width:14px;min-width:14px;padding:0}
 th.note-col,td.note-col{min-width:200px}
 td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surface)!important}
 
+/* 年份分隔行（个人明细弹窗） */
+.sheet-table tbody tr.year-row td{background:#D8E6F8!important;font-weight:700;color:#16335F;text-align:left;padding:7px 10px;font-size:12.5px}
+
 /* 合计行 */
 .sheet-table tfoot td{background:var(--total-bg);font-weight:700;padding:10px 6px;font-variant-numeric:tabular-nums}
 .sheet-table tfoot td.name-col,.sheet-table tfoot td.ym-col{background:var(--total-bg)}
@@ -207,7 +210,6 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
-        <tfoot id="tfoot"></tfoot>
       </table>
     </div>
     <div class="table-foot">💾 数据自动保存在本机浏览器（localStorage），关闭页面不丢失；每月数据独立存储，右上角日历可切换月份。点击成员姓名弹出其个人月度明细（纵轴年月、横轴与本表一致）。删除成员会清空其在所有月份的数据。</div>
@@ -245,7 +247,7 @@ function fmtNum(v){
   return isNaN(n)?'0':String(n);
 }
 
-var tbody=$('tbody'), tfoot=$('tfoot'), monthText=$('monthText'), calPop=$('calPop');
+var tbody=$('tbody'), monthText=$('monthText'), calPop=$('calPop');
 var today=new Date();
 var cur={y:today.getFullYear(), m:today.getMonth()+1};
 var calViewY=cur.y; // 日历弹层中展示的年份
@@ -339,7 +341,6 @@ function renderTable(){
         var d=monthData[name]||(monthData[name]={});
         d[col.key]=inp.value;      // 空字符串 = 未填写
         persistMonth();
-        updateTotals();
         flashSaved();
       }, ri, ci, function(){ return tbody.querySelectorAll('tr'); });
       td.appendChild(inp);
@@ -354,49 +355,20 @@ function renderTable(){
   });
 }
 
-function updateTotals(){
-  var sums={};
-  NUM_KEYS.forEach(function(k){ sums[k]=0; });
-  roster.forEach(function(name){
-    var rec=monthData[name]||{};
-    NUM_KEYS.forEach(function(k){
-      var v=parseFloat(rec[k]);
-      if(!isNaN(v)) sums[k]+=v;
-    });
-  });
-  tfoot.innerHTML='';
-  var tr=document.createElement('tr');
-  var td0=document.createElement('td');
-  td0.className='name-col total-label'; td0.textContent='合计';
-  tr.appendChild(td0);
-  COLS.forEach(function(col){
-    var td=document.createElement('td');
-    if(col.type!=='text') td.textContent=fmtNum(sums[col.key]);
-    tr.appendChild(td);
-  });
-  var tdAct=document.createElement('td'); tdAct.className='act-col';
-  tr.appendChild(tdAct);
-  tfoot.appendChild(tr);
-}
-
 /* ================= 个人月度明细弹窗 ================= */
-function collectMonths(){
+function collectYears(){
   var map={};
   Object.keys(localStorage).forEach(function(k){
     var m=k.match(/^kq:(\d{4})-(\d{2})$/);
-    if(m) map[m[1]+'-'+m[2]]={y:+m[1], m:+m[2]};
+    if(m) map[+m[1]]=true;
   });
-  /* 当前查看的月份始终包含（即使还没数据） */
-  var ck=cur.y+'-'+String(cur.m).padStart(2,'0');
-  if(!map[ck]) map[ck]={y:cur.y, m:cur.m};
-  var list=[];
-  Object.keys(map).forEach(function(k){ list.push(map[k]); });
-  list.sort(function(a,b){ return (a.y-b.y)||(a.m-b.m); });
-  return list;
+  /* 当前查看的年份始终包含（即使还没数据） */
+  map[cur.y]=true;
+  return Object.keys(map).map(Number).sort(function(a,b){ return a-b; });
 }
 
 function openDetail(name){
-  var months=collectMonths();
+  var years=collectYears();
   var overlay=document.createElement('div');
   overlay.className='modal-overlay';
   overlay.id='detailModal';
@@ -410,7 +382,7 @@ function openDetail(name){
   title.className='modal-title';
   title.innerHTML='👤 <span></span> 月度明细 <span class="mt-count"></span>';
   title.querySelector('span').textContent=name;
-  title.querySelector('.mt-count').textContent='共 '+months.length+' 个月';
+  title.querySelector('.mt-count').textContent='共 '+years.length+' 年 · 每年1-12月';
   var close=document.createElement('button');
   close.className='modal-close'; close.title='关闭（Esc）'; close.textContent='✕';
   close.addEventListener('click', closeDetail);
@@ -459,54 +431,60 @@ function renderDetailTable(name){
   var dtb=$('detailTbody');
   if(!dtb) return;
   dtb.innerHTML='';
-  var months=collectMonths();
-  var getTrs=function(){ return dtb.querySelectorAll('tr'); };
+  var years=collectYears();
+  var getTrs=function(){ return dtb.querySelectorAll('tr.detail-month-row'); };
+  var ri=0;
 
-  if(months.length===0){
-    var tr=document.createElement('tr');
-    var td=document.createElement('td');
-    td.className='empty'; td.colSpan=10;
-    td.textContent='暂无月度数据，请先在汇总表中填写';
-    tr.appendChild(td);
-    dtb.appendChild(tr);
-    updateDetailTotals(name);
-    return;
-  }
+  years.forEach(function(y){
+    /* 年份分隔行 */
+    var trY=document.createElement('tr');
+    trY.className='year-row';
+    var tdY=document.createElement('td');
+    tdY.className='year-cell';
+    tdY.colSpan=10;
+    tdY.textContent='📅 '+y+'年';
+    trY.appendChild(tdY);
+    dtb.appendChild(trY);
 
-  months.forEach(function(mo, ri){
-    var d=loadJSON(monthKey(mo.y,mo.m), {})||{};
-    var rec=d[name]||{};
-    var tr=document.createElement('tr');
+    /* 该年份 1-12 月全部列出 */
+    for(var m=1;m<=12;m++){
+      (function(mo){
+        var d=loadJSON(monthKey(y,mo), {})||{};
+        var rec=d[name]||{};
+        var tr=document.createElement('tr');
+        tr.className='detail-month-row';
 
-    var tdYm=document.createElement('td');
-    tdYm.className='ym-col';
-    var lab=document.createElement('div');
-    lab.className='ym-label';
-    lab.textContent=mo.y+'年'+mo.m+'月';
-    tdYm.appendChild(lab);
-    tr.appendChild(tdYm);
+        var tdYm=document.createElement('td');
+        tdYm.className='ym-col';
+        var lab=document.createElement('div');
+        lab.className='ym-label';
+        lab.textContent=mo+'月';
+        tdYm.appendChild(lab);
+        tr.appendChild(tdYm);
 
-    COLS.forEach(function(col, ci){
-      var td=document.createElement('td');
-      var inp=buildInput(col, rec[col.key], function(){
-        var dm=loadJSON(monthKey(mo.y,mo.m), {})||{};
-        var pr=dm[name]||(dm[name]={});
-        pr[col.key]=inp.value;
-        saveJSON(monthKey(mo.y,mo.m), dm);
-        /* 若编辑的是汇总表当前月份，同步刷新汇总表 */
-        if(mo.y===cur.y && mo.m===cur.m){
-          monthData=dm;
-          renderTable();
-          updateTotals();
-        }
-        updateDetailTotals(name);
-        flashSaved();
-      }, ri, ci, getTrs);
-      td.appendChild(inp);
-      tr.appendChild(td);
-    });
+        COLS.forEach(function(col, ci){
+          var td=document.createElement('td');
+          var inp=buildInput(col, rec[col.key], function(){
+            var dm=loadJSON(monthKey(y,mo), {})||{};
+            var pr=dm[name]||(dm[name]={});
+            pr[col.key]=inp.value;
+            saveJSON(monthKey(y,mo), dm);
+            /* 若编辑的是汇总表当前月份，同步刷新汇总表 */
+            if(y===cur.y && mo===cur.m){
+              monthData=dm;
+              renderTable();
+            }
+            updateDetailTotals(name);
+            flashSaved();
+          }, ri, ci, getTrs);
+          td.appendChild(inp);
+          tr.appendChild(td);
+        });
 
-    dtb.appendChild(tr);
+        dtb.appendChild(tr);
+        ri++;
+      })(m);
+    }
   });
   updateDetailTotals(name);
 }
@@ -516,13 +494,15 @@ function updateDetailTotals(name){
   if(!tfootD) return;
   var sums={};
   NUM_KEYS.forEach(function(k){ sums[k]=0; });
-  collectMonths().forEach(function(mo){
-    var d=loadJSON(monthKey(mo.y,mo.m), {})||{};
-    var rec=d[name]||{};
-    NUM_KEYS.forEach(function(k){
-      var v=parseFloat(rec[k]);
-      if(!isNaN(v)) sums[k]+=v;
-    });
+  collectYears().forEach(function(y){
+    for(var m=1;m<=12;m++){
+      var d=loadJSON(monthKey(y,m), {})||{};
+      var rec=d[name]||{};
+      NUM_KEYS.forEach(function(k){
+        var v=parseFloat(rec[k]);
+        if(!isNaN(v)) sums[k]+=v;
+      });
+    }
   });
   tfootD.innerHTML='';
   var tr=document.createElement('tr');
@@ -544,7 +524,6 @@ function setMonth(y,m){
   monthText.textContent=y+'年'+m+'月';
   calViewY=y;
   renderTable();
-  updateTotals();
   renderCal();
 }
 $('prevBtn').addEventListener('click', function(){
@@ -609,7 +588,6 @@ $('addBtn').addEventListener('click', function(){
   });
   persistRoster();
   renderTable();
-  updateTotals();
   if(added.length) flashSaved();
   var msg='';
   if(added.length) msg+='已添加：'+added.join('、')+'（'+added.length+' 人）';
@@ -637,7 +615,6 @@ function removePerson(name){
     }
   });
   renderTable();
-  updateTotals();
   flashSaved();
 }
 
@@ -653,17 +630,6 @@ $('exportBtn').addEventListener('click', function(){
       return (v===undefined||v===null)?'':v;
     })));
   });
-  var tot=['合计'];
-  NUM_KEYS.forEach(function(k){
-    var s=0;
-    roster.forEach(function(name){
-      var v=parseFloat((monthData[name]||{})[k]);
-      if(!isNaN(v)) s+=v;
-    });
-    tot.push(String(Math.round(s*100)/100));
-  });
-  tot.push('');
-  rows.push(tot);
   var csv=rows.map(function(r){
     return r.map(function(v){
       v=String(v);
