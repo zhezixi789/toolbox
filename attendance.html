@@ -483,11 +483,13 @@ function renderDetailTable(name){
         tr.appendChild(tdYm);
 
         COLS.forEach(function(col, ci){
+          /* 详情页备注与汇总页备注各自独立存储：汇总用 note，详情用 dnote */
+          var dcol=(col.key==='note') ? {key:'dnote', label:'备注', type:'text'} : col;
           var td=document.createElement('td');
-          var inp=buildInput(col, rec[col.key], function(){
+          var inp=buildInput(dcol, rec[dcol.key], function(){
             var dm=loadJSON(monthKey(y,mo), {})||{};
             var pr=dm[name]||(dm[name]={});
-            pr[col.key]=inp.value;
+            pr[dcol.key]=inp.value;
             saveJSON(monthKey(y,mo), dm);
             /* 若编辑的是汇总表当前月份，同步刷新汇总表 */
             if(y===cur.y && mo===cur.m){
