@@ -150,6 +150,22 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
   .modal-overlay{padding:10px}
   .modal-body{padding:10px}
 }
+
+/* ---------- PDF 导出（浏览器打印 → 另存为 PDF，无需联网） ---------- */
+.print-sheet{display:none}
+@page{size:A4 landscape;margin:10mm}
+@media print{
+  .app{display:none!important}
+  .modal-overlay{display:none!important}
+  .print-sheet{display:block;color:#000;background:#fff}
+  body{background:#fff;padding:0}
+}
+.print-sheet h1{font-size:18px;text-align:center;margin-bottom:10px}
+.print-sheet table{width:100%;border-collapse:collapse;font-size:11px}
+.print-sheet th,.print-sheet td{border:1px solid #444;padding:4px 6px;text-align:center}
+.print-sheet th{background:#E3EDF8;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.print-sheet td.ps-note{text-align:left}
+.print-sheet .ps-meta{margin-top:10px;font-size:10px;color:#555;text-align:right}
 </style>
 </head>
 <body>
@@ -183,6 +199,8 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
   <div class="toolbar">
     <button class="btn btn-primary" id="addBtn">＋ 添加成员</button>
     <button class="btn btn-ghost" id="exportBtn">⬇ 导出 CSV</button>
+    <button class="btn btn-ghost" id="exportXlsBtn">📊 导出 Excel</button>
+    <button class="btn btn-ghost" id="exportPdfBtn">📄 导出 PDF</button>
     <span class="save-hint" id="saveHint">数据仅保存在本机浏览器，无需联网</span>
   </div>
 
@@ -215,6 +233,8 @@ td.empty{height:140px;color:var(--text-muted);padding:24px;background:var(--surf
     <div class="table-foot">💾 数据自动保存在本机浏览器（localStorage），关闭页面不丢失；每月数据独立存储，右上角日历可切换月份。点击成员姓名弹出其个人月度明细（纵轴年月、横轴与本表一致）。删除成员会清空其在所有月份的数据。</div>
   </div>
 </div>
+
+<div class="print-sheet" id="printSheet"></div>
 
 <script>
 (function(){
@@ -637,13 +657,75 @@ $('exportBtn').addEventListener('click', function(){
     }).join(',');
   }).join('\r\n');
   var blob=new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+  downloadBlob(blob, '考勤汇总-'+cur.y+'年'+cur.m+'月.csv');
+});
+
+/* ================= 导出工具 ================= */
+function downloadBlob(blob, filename){
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='考勤汇总-'+cur.y+'年'+cur.m+'月.csv';
+  a.download=filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
+}
+function xmlEsc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ---------- 导出 Excel（SpreadsheetML 格式，无需联网，Excel/WPS 可直接打开） ---------- */
+$('exportXlsBtn').addEventListener('click', function(){
+  var rows=[];
+  var head=['姓名'].concat(COLS.map(function(c){ return c.label; }));
+  rows.push(head);
+  roster.forEach(function(name){
+    var rec=monthData[name]||{};
+    rows.push([name].concat(COLS.map(function(c){
+      var v=rec[c.key];
+      return (v===undefined||v===null)?'':v;
+    })));
+  });
+  var xml='<?xml version="1.0" encoding="UTF-8"?>\n'+
+    '<?mso-application progid="Excel.Sheet"?>\n'+
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+
+    '<Styles><Style ss:ID="h"><Font ss:Bold="1"/><Interior ss:Color="#DCE6F5" ss:Pattern="Solid"/></Style></Styles>'+
+    '<Worksheet ss:Name="'+xmlEsc(cur.y+'年'+cur.m+'月')+'"><Table>';
+  xml+='<Column ss:Width="90"/>';
+  COLS.forEach(function(c){ xml+='<Column ss:Width="'+(c.type==='text'?200:70)+'"/>'; });
+  rows.forEach(function(r,ri){
+    xml+='<Row>';
+    r.forEach(function(v){
+      var isNum = (typeof v==='string' && v!=='' && !isNaN(parseFloat(v)) && isFinite(v));
+      if(v===''){ xml+='<Cell'+(ri===0?' ss:StyleID="h"':'')+'></Cell>'; }
+      else if(isNum){ xml+='<Cell><Data ss:Type="Number">'+parseFloat(v)+'</Data></Cell>'; }
+      else { xml+='<Cell'+(ri===0?' ss:StyleID="h"':'')+'><Data ss:Type="String">'+xmlEsc(v)+'</Data></Cell>'; }
+    });
+    xml+='</Row>';
+  });
+  xml+='</Table></Worksheet></Workbook>';
+  var blob=new Blob(['﻿'+xml], {type:'application/vnd.ms-excel;charset=utf-8'});
+  downloadBlob(blob, '考勤汇总-'+cur.y+'年'+cur.m+'月.xls');
+});
+
+/* ---------- 导出 PDF（调用浏览器打印 → 另存为 PDF，无需联网） ---------- */
+$('exportPdfBtn').addEventListener('click', function(){
+  var ps=$('printSheet');
+  var head=['姓名'].concat(COLS.map(function(c){ return c.label; }));
+  var html='<h1>考勤汇总 · '+cur.y+'年'+cur.m+'月</h1>'+
+    '<table><thead><tr>'+head.map(function(h){ return '<th>'+xmlEsc(h)+'</th>'; }).join('')+'</tr></thead><tbody>';
+  roster.forEach(function(name){
+    var rec=monthData[name]||{};
+    html+='<tr><td>'+xmlEsc(name)+'</td>'+COLS.map(function(c){
+      var v=rec[c.key];
+      v=(v===undefined||v===null)?'':v;
+      return '<td>'+xmlEsc(v)+'</td>';
+    }).join('')+'</tr>';
+  });
+  html+='</tbody></table>'+
+    '<p class="ps-meta">导出时间：'+new Date().toLocaleString('zh-CN',{hour12:false})+'</p>';
+  ps.innerHTML=html;
+  window.print();
 });
 
 /* ================= 初始化 ================= */
